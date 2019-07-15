@@ -5,6 +5,7 @@ pj = lambda *paths: os.path.abspath(os.path.join(*paths))
 repo_root = os.getcwd()
 
 data_dir = pj(repo_root, 'data')
+pathway_data = pj(data_dir, 'pathway_data')
 models_dir = pj(repo_root, 'models')
 results_dir = pj(repo_root, 'results')
 
