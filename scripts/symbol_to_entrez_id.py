@@ -49,6 +49,13 @@ def map_loc_genes(gene_list):
             unmatched.append(gene)
     return gene_map, unmatched
 
+def fill_na(symbols_map, symbols_list):
+    filled_map = symbols_map.copy()
+    for s in symbols_list:
+        if s not in filled_map:
+            filled_map[s] = 'N/A'
+    return filled_map
+
 def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
     mg = mygene.MyGeneInfo()
 
@@ -63,6 +70,7 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
                             verbose=False,
                             as_dataframe=True)
 
+    df_exact = df_exact.loc[~df_exact.index.duplicated(keep='first')]
     symbol_map = query_to_map(df_exact, 'entrezgene')
 
     matched = df_exact[df_exact['notfound'].isnull()]
@@ -75,6 +83,9 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
         num_genes, num_matched_genes = get_num_genes(df_exact)
         print('-- Matched {} of {} genes'.format(
             num_matched_genes + len(list(loc_map.keys())), num_genes))
+
+    if len(unmatched) == 0:
+        return symbol_map
 
     time.sleep(sleep_time)
 
@@ -92,15 +103,16 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
 
     # duplicates are sorted in order of MyGene confidence score,
     # so keep the most confident and drop others
+    # TODO: maybe revisit this and try to keep genes that match
+    # with TCGA data? or may not be worth it
     df_alias = df_alias.loc[~df_alias.index.duplicated(keep='first')]
+    df_alias = df_alias.loc[~df_alias['symbol'].duplicated(keep='first')]
 
     if verbose:
         num_genes, num_matched_genes = get_num_genes(df_alias)
         print('-- Found aliases for {} of {} genes'.format(
-            num_matched_genes, num_genes))
+            num_matched_genes, len(unmatched)))
 
-    # TODO: check alias results for duplicates (could have
-    # multiple aliases for one gene)
     alias_map = query_to_map(df_alias, 'symbol', map_to_lists=True)
     inverse_alias_map = invert_map(alias_map)
 
@@ -128,7 +140,7 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
     inexact_map = {inverse_alias_map[k]: v
                     for k, v in inexact_map.items()}
 
-    return {**symbol_map, **inexact_map}
+    return fill_na({**symbol_map, **inexact_map}, symbols_list)
 
 if __name__ == '__main__':
     # CCDC83 has an exact match, DDX26B has an inexact match
@@ -137,7 +149,10 @@ if __name__ == '__main__':
                      sep='\t')
     # test_symbols = df.index.values[0:500]
     test_symbols = df.index.values
-    symbol_to_eid(test_symbols, verbose=True)
+    gene_map = symbol_to_eid(test_symbols, verbose=True)
+    for k, v in gene_map.items():
+        if v == 'N/A':
+            print('{}\t{}'.format(k, v))
     # print(test_symbols)
     # print(symbol_to_eid(test_symbols, verbose=True))
 
