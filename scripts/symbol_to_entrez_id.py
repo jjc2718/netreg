@@ -78,7 +78,6 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
                             species='human',
                             verbose=False,
                             as_dataframe=True)
-    df_exact.to_csv('exact.csv')
 
     # some symbols may have higher confidence results for
     # Ensembl keys, so sorting by entrezgene and dropping
@@ -128,7 +127,6 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
 
     # get rid of rows where the alias has already been matched
     df_alias = df_alias.loc[~df_alias['symbol'].isin(matched)]
-    df_alias.to_csv('aliases.csv')
 
     # duplicates are sorted in order of MyGene confidence score,
     # so keep the most confident and drop others
@@ -160,7 +158,6 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
                               verbose=False,
                               as_dataframe=True)
     df_inexact = df_inexact[df_inexact['entrezgene'].notnull()]
-    df_inexact.to_csv('inexact.csv')
 
     if verbose:
         num_genes, num_matched_genes = get_num_genes(df_inexact)
