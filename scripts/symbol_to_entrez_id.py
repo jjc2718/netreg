@@ -56,6 +56,15 @@ def fill_na(symbols_map, symbols_list):
             filled_map[s] = 'N/A'
     return filled_map
 
+def get_list_duplicates(in_list):
+    seen = set()
+    duplicates = set()
+    for item in in_list:
+        if item in seen:
+            duplicates.add(item)
+        seen.add(item)
+    return list(duplicates)
+
 def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
     mg = mygene.MyGeneInfo()
 
@@ -69,20 +78,36 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
                             species='human',
                             verbose=False,
                             as_dataframe=True)
+    df_exact.to_csv('exact.csv')
 
+    # some symbols may have higher confidence results for
+    # Ensembl keys, so sorting by entrezgene and dropping
+    # duplicates keeps the result with an Entrez id
+    df_exact.sort_values(by='entrezgene', inplace=True)
     df_exact = df_exact.loc[~df_exact.index.duplicated(keep='first')]
     symbol_map = query_to_map(df_exact, 'entrezgene')
-
-    matched = df_exact[df_exact['notfound'].isnull()]
-    unmatched = df_exact[df_exact['notfound'].notnull()].index.values
-
-    loc_map, unmatched = map_loc_genes(unmatched)
-    symbol_map = {**symbol_map, **loc_map}
 
     if verbose:
         num_genes, num_matched_genes = get_num_genes(df_exact)
         print('-- Matched {} of {} genes'.format(
-            num_matched_genes + len(list(loc_map.keys())), num_genes))
+            num_matched_genes, num_genes))
+
+    matched = df_exact[df_exact['notfound'].isnull()].index.values
+    unmatched = df_exact[df_exact['notfound'].notnull()].index.values
+
+    if len(unmatched) == 0:
+        return symbol_map
+
+    if verbose:
+        print('Trying to manually map unmapped genes:')
+
+    unmatched_before = len(unmatched)
+    loc_map, unmatched = map_loc_genes(unmatched)
+    symbol_map = {**symbol_map, **loc_map}
+
+    if verbose:
+        print('-- Matched {} of {} genes'.format(
+            unmatched_before - len(unmatched), unmatched_before))
 
     if len(unmatched) == 0:
         return symbol_map
@@ -90,7 +115,7 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
     time.sleep(sleep_time)
 
     if verbose:
-        print('Querying for aliases of {} unmatched genes:'.format(
+        print('Querying MyGene for aliases of {} unmatched genes:'.format(
             len(unmatched)))
 
     # then query for aliases of unmatched symbols
@@ -101,10 +126,15 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
                             verbose=False,
                             as_dataframe=True)
 
+    # get rid of rows where the alias has already been matched
+    df_alias = df_alias.loc[~df_alias['symbol'].isin(matched)]
+    df_alias.to_csv('aliases.csv')
+
     # duplicates are sorted in order of MyGene confidence score,
     # so keep the most confident and drop others
+    #
     # TODO: maybe revisit this and try to keep genes that match
-    # with TCGA data? or may not be worth it
+    # with TCGA data?
     df_alias = df_alias.loc[~df_alias.index.duplicated(keep='first')]
     df_alias = df_alias.loc[~df_alias['symbol'].duplicated(keep='first')]
 
@@ -130,6 +160,7 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
                               verbose=False,
                               as_dataframe=True)
     df_inexact = df_inexact[df_inexact['entrezgene'].notnull()]
+    df_inexact.to_csv('inexact.csv')
 
     if verbose:
         num_genes, num_matched_genes = get_num_genes(df_inexact)
@@ -140,20 +171,27 @@ def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
     inexact_map = {inverse_alias_map[k]: v
                     for k, v in inexact_map.items()}
 
-    return fill_na({**symbol_map, **inexact_map}, symbols_list)
+    symbol_map = fill_na({**symbol_map, **inexact_map}, symbols_list)
+
+    if verbose:
+        eids = list(symbol_map.values())
+        total_count = len(eids)
+        na_count = eids.count('N/A')
+        duplicates = get_list_duplicates(eids)
+        print('RESULTS: matched {} of {} genes ({} duplicate Entrez IDs)'.format(
+            total_count - na_count, total_count, len(duplicates)))
+
+    return symbol_map
 
 if __name__ == '__main__':
     # CCDC83 has an exact match, DDX26B has an inexact match
     # test_symbols = ['DDX26B', 'CCDC83']
     df = pd.read_csv('./data/pathway_data/canonical_pathways.tsv',
                      sep='\t')
-    # test_symbols = df.index.values[0:500]
     test_symbols = df.index.values
     gene_map = symbol_to_eid(test_symbols, verbose=True)
     for k, v in gene_map.items():
         if v == 'N/A':
             print('{}\t{}'.format(k, v))
-    # print(test_symbols)
-    # print(symbol_to_eid(test_symbols, verbose=True))
 
 
