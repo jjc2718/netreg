@@ -101,9 +101,9 @@ recon_file = os.path.join(args.output_dir,
 
 for ix, seed in enumerate(random_seeds, 1):
     np.random.seed(seed)
-    seed_file = os.path.join(comp_out_dir, 'model_{}'.format(seed))
+    seed_name = seed
     if args.shuffle:
-        seed_file = '{}_shuffled'.format(seed_file)
+        seed_name = '{}_shuffled'.format(seed_name)
         shuffled_train_df = shuffle_train_genes(rnaseq_train_df)
         dm = DataModel(df=shuffled_train_df,
                        test_df=rnaseq_test_df)
@@ -130,20 +130,15 @@ for ix, seed in enumerate(random_seeds, 1):
 
 
     # Obtain z matrix (sample scores per latent space feature) for all models
-    full_z_file = os.path.join(cfg.models_dir,
-                    '{}_z_matrix.tsv.gz'.format(seed_file))
-    dm.combine_models().to_csv(full_z_file, sep='\t', compression='gzip')
+    z_suffix = '{}_z_matrix.tsv.gz'.format(seed_name)
+    dm.write_models(comp_out_dir, z_suffix)
 
-    full_test_z_file = os.path.join(cfg.models_dir,
-                    '{}_z_test_matrix.tsv.gz'.format(seed_file))
-    dm.combine_models(test_set=True).to_csv(full_test_z_file, sep='\t',
-                                            compression='gzip')
+    test_z_suffix = '{}_z_test_matrix.tsv.gz'.format(seed_name)
+    dm.write_models(comp_out_dir, test_z_suffix, test_set=True)
 
     # Obtain weight matrices (gene by latent space feature) for all models
-    full_weight_file = os.path.join(cfg.models_dir,
-                    '{}_weight_matrix.tsv.gz'.format(seed_file))
-    dm.combine_weight_matrix().to_csv(full_weight_file, sep='\t',
-                                      compression='gzip')
+    weight_suffix = '{}_weight_matrix.tsv.gz'.format(seed_name)
+    dm.write_weight_matrices(comp_out_dir, weight_suffix)
 
     # Store reconstruction costs and reconstructed input at training end
     full_reconstruction, reconstructed_matrices = dm.compile_reconstruction()

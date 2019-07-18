@@ -3,6 +3,7 @@ Adapted from Tybalt data_models:
 https://github.com/greenelab/tybalt/blob/master/tybalt/data_models.py
 
 """
+import os
 import numpy as np
 import pandas as pd
 from scipy.stats.mstats import zscore
@@ -150,7 +151,6 @@ class DataModel():
             not os.path.exists(output_weights)):
             tf = tempfile.NamedTemporaryFile(mode='w')
             self.df.to_csv(tf, sep='\t')
-            print(tf.name)
             args = [
                 'Rscript',
                 os.path.join(cfg.scripts_dir, 'run_plier.R'),
@@ -190,68 +190,66 @@ class DataModel():
                                                           seed)
 
 
-    def combine_models(self, include_labels=False, include_raw=False,
-                       test_set=False):
-        """
-        Merge z matrices together across algorithms
-        Arguments:
-        test_set - if True, output z matrix predictions for test set
-        Output:
-        pandas dataframe of all model z matrices
-        """
-        all_models = []
+    def write_models(self, output_dir, file_suffix, test_set=False):
+        """Write models (z matrices) to the given file.
 
+        Arguments:
+        output_dir - Directory to write models to
+        file_suffix - Suffix of filename (containing, for example, the seed)
+        """
         if hasattr(self, 'pca_df'):
+            output_file = os.path.join(output_dir,
+                                       'pca_{}'.format(file_suffix))
             if test_set:
                 pca_df = pd.DataFrame(self.pca_test_df,
                                       index=self.test_df.index,
                                       columns=self.pca_df.columns)
             else:
                 pca_df = self.pca_df
-            all_models += [pca_df]
+            pca_df.to_csv(output_file, sep='\t', compression='gzip')
 
         if hasattr(self, 'nmf_df'):
+            output_file = os.path.join(output_dir,
+                                       'nmf_{}'.format(file_suffix))
             if test_set:
                 nmf_df = pd.DataFrame(self.nmf_test_df,
                                       index=self.test_df.index,
                                       columns=self.nmf_df.columns)
             else:
                 nmf_df = self.nmf_df
-            all_models += [nmf_df]
+            nmf_df.to_csv(output_file, sep='\t', compression='gzip')
 
         if hasattr(self, 'plier_df'):
+            output_file = os.path.join(output_dir,
+                                       'plier_{}'.format(file_suffix))
             if test_set:
                 plier_df = pd.DataFrame(self.plier_test_df,
                                         index=self.test_df.index,
                                         columns=self.plier_df.columns)
             else:
                 plier_df = self.plier_df
-            all_models += [plier_df]
-
-        if include_raw:
-            all_models += [self.df]
-
-        if include_labels:
-            all_models += [self.other_df]
-
-        all_df = pd.concat(all_models, axis=1)
-
-        return all_df
+            plier_df.to_csv(output_file, sep='\t', compression='gzip')
 
 
-    def combine_weight_matrix(self):
-        all_weight = []
+    def write_weight_matrices(self, output_dir, file_suffix):
+        """Write weight matrices to the given file.
+
+        Arguments:
+        output_dir - Directory to write models to
+        file_suffix - Suffix of filename (containing, for example, the seed)
+        """
         if hasattr(self, 'pca_df'):
-            all_weight += [self.pca_weights]
+            output_file = os.path.join(output_dir,
+                                       'pca_{}'.format(file_suffix))
+            self.pca_weights.to_csv(output_file, sep='\t', compression='gzip')
         if hasattr(self, 'nmf_df'):
-            all_weight += [self.nmf_weights]
+            output_file = os.path.join(output_dir,
+                                       'nmf_{}'.format(file_suffix))
+            self.nmf_weights.to_csv(output_file, sep='\t', compression='gzip')
         if hasattr(self, 'plier_df'):
-            all_weight += [self.plier_weights]
-
-        all_weight_df = pd.concat(all_weight, axis=0).T
-        all_weight_df = all_weight_df.rename({'Unnamed: 0': 'entrez_gene'},
-                                             axis='columns')
-        return all_weight_df
+            output_file = os.path.join(output_dir,
+                                       'plier_{}'.format(file_suffix))
+            self.plier_weights.to_csv(output_file, sep='\t', compression='gzip')
 
 
     def compile_reconstruction(self, test_set=False):
