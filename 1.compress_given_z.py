@@ -37,7 +37,7 @@ p.add_argument('-n', '--num_seeds', type=int, default=5,
                help='number of different seeds to run on current data')
 p.add_argument('-m', '--subset_mad_genes', type=int, default=8000,
                help='subset num genes based on mean absolute deviation')
-p.add_argument('-o', '--output_dir', default=cfg.models_dir,
+p.add_argument('-o', '--models_dir', default=cfg.models_dir,
                help='where to save the output files')
 p.add_argument('-s', '--shuffle', action='store_true',
                help='randomize gene expression data for negative control')
@@ -80,7 +80,7 @@ else:
 
 # specify location of output files
 
-comp_out_dir = os.path.join(os.path.abspath(args.output_dir),
+comp_out_dir = os.path.join(os.path.abspath(args.models_dir),
                             'ensemble_z_matrices',
                             'components_{}'.format(args.num_components))
 
@@ -95,7 +95,7 @@ reconstruction_results = []
 test_reconstruction_results = []
 
 logging.debug('Fitting compression models...')
-recon_file = os.path.join(args.output_dir,
+recon_file = os.path.join(args.models_dir,
                           '{}reconstruction.tsv'.format(
                           file_prefix))
 

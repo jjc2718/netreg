@@ -50,6 +50,7 @@ def load_pancancer_data():
         mut_burden_df
     )
 
+
 def load_top_50():
     """Load top 50 mutated genes from BioBombe repo.
 
@@ -66,7 +67,6 @@ def load_top_50():
     return genes_df
 
 
-
 def subset_genes_by_mad(train_df, test_df, mad_file, subset_mad_genes):
     # subset genes by mean absolute deviation
     mad_genes_df = pd.read_csv(mad_file, sep='\t')
@@ -77,12 +77,13 @@ def subset_genes_by_mad(train_df, test_df, mad_file, subset_mad_genes):
     return (train_df, test_df)
 
 
-def build_feature_dictionary(load_data=False, store_train_test="both"):
+def build_feature_dictionary(models_dir, load_data=False, store_train_test="both"):
     """
     Generate a nested dictionary of the directory structure pointing to compressed
     feature matrices for training and testing sets
 
     Arguments:
+    models_dir - directory to look in for compressed features
     load_data - boolean if the data is to be loaded and stored in the
                 return dict
     store_train_test - string indicating which data to load
@@ -98,7 +99,7 @@ def build_feature_dictionary(load_data=False, store_train_test="both"):
         z_matrix_dict[signal] = {}
 
         matrix_dir = os.path.join(
-            cfg.models_dir, "ensemble_z_matrices"
+            models_dir, "ensemble_z_matrices"
         )
 
         for comp_dir in os.listdir(matrix_dir):
@@ -114,29 +115,33 @@ def build_feature_dictionary(load_data=False, store_train_test="both"):
                     continue
 
                 seed = os.path.basename(z_file).split("_")[1]
+                alg = os.path.basename(z_file).split("_")[0]
 
                 if seed not in z_matrix_dict[signal][z_dim].keys():
                     z_matrix_dict[signal][z_dim][seed] = {}
+
+                if alg not in z_matrix_dict[signal][z_dim][seed].keys():
+                    z_matrix_dict[signal][z_dim][seed][alg] = {}
 
                 if "_test_" in z_file:
                     if store_train_test == "train":
                         continue
                     if load_data:
-                        z_matrix_dict[signal][z_dim][seed]["test"] = pd.read_csv(
+                        z_matrix_dict[signal][z_dim][seed][alg]["test"] = pd.read_csv(
                             z_file, index_col=0, sep='\t'
                         )
                     else:
-                        z_matrix_dict[signal][z_dim][seed]["test"] = z_file
+                        z_matrix_dict[signal][z_dim][seed][alg]["test"] = z_file
                 else:
                     num_models += 1
                     if store_train_test == "test":
                         continue
                     if load_data:
-                        z_matrix_dict[signal][z_dim][seed]["train"] = pd.read_csv(
+                        z_matrix_dict[signal][z_dim][seed][alg]["train"] = pd.read_csv(
                             z_file, index_col=0, sep='\t'
                         )
                     else:
-                        z_matrix_dict[signal][z_dim][seed]["train"] = z_file
+                        z_matrix_dict[signal][z_dim][seed][alg]["train"] = z_file
 
 
     return z_matrix_dict, num_models
@@ -378,8 +383,6 @@ def align_matrices(x_file_or_df, y, add_cancertype_covariate=True, algorithm=Non
     # Load Data
     try:
         x_df = pd.read_csv(x_file_or_df, index_col=0, sep='\t')
-        if algorithm:
-            x_df = x_df.loc[:, x_df.columns.str.contains(algorithm)]
     except:
         x_df = x_file_or_df
 
