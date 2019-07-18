@@ -88,7 +88,8 @@ if not os.path.exists(comp_out_dir):
     os.makedirs(comp_out_dir)
 
 np.random.seed(cfg.default_seed)
-random_seeds = np.random.randint(0, high=1000000, size=args.num_seeds)
+random_seeds = np.random.choice(np.arange(0, 1000000), size=args.num_seeds)
+print(random_seeds); exit()
 
 reconstruction_results = []
 test_reconstruction_results = []
