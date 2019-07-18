@@ -8,6 +8,7 @@ data_dir = pj(repo_root, 'data')
 pathway_data = pj(data_dir, 'pathway_data')
 models_dir = pj(repo_root, 'models')
 results_dir = pj(repo_root, 'results')
+scripts_dir = pj(repo_root, 'scripts')
 
 default_seed = 42
 

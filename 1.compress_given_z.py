@@ -94,7 +94,7 @@ print(random_seeds); exit()
 reconstruction_results = []
 test_reconstruction_results = []
 
-logging.debug('Fitting compressed models...')
+logging.debug('Fitting compression models...')
 recon_file = os.path.join(args.output_dir,
                           '{}reconstruction.tsv'.format(
                           file_prefix))
@@ -121,6 +121,13 @@ for ix, seed in enumerate(random_seeds, 1):
         dm.nmf(n_components=args.num_components,
                transform_test_df=True,
                seed=seed)
+    if 'plier' in algs_to_run:
+        logging.debug('-- Fitting PLIER model for random seed {} of {}'.format(
+                      ix, len(random_seeds)))
+        dm.plier(n_components=args.num_components,
+                 transform_test_df=True,
+                 seed=seed)
+
 
     # Obtain z matrix (sample scores per latent space feature) for all models
     full_z_file = os.path.join(cfg.models_dir,

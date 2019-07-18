@@ -6,9 +6,10 @@ https://github.com/greenelab/tybalt/blob/master/tybalt/data_models.py
 import numpy as np
 import pandas as pd
 from scipy.stats.mstats import zscore
-
 from sklearn import decomposition
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
+import config as cfg
 
 class DataModel():
     """
@@ -93,7 +94,7 @@ class DataModel():
 
     @classmethod
     def list_algorithms(self):
-        return ['pca', 'nmf']
+        return ['pca', 'nmf', 'plier']
 
     def pca(self, n_components, transform_df=False, transform_test_df=False):
         self.pca_fit = decomposition.PCA(n_components=n_components)
@@ -105,7 +106,7 @@ class DataModel():
                                         columns=self.df.columns,
                                         index=colnames)
         if transform_df:
-            out_df = self.pca_fit.transform(transform_df)
+            out_df = self.pca_fit.transform(self.df)
             return out_df
 
         if transform_test_df:
@@ -125,11 +126,68 @@ class DataModel():
                                         columns=self.df.columns,
                                         index=colnames)
         if transform_df:
-            out_df = self.nmf_fit.transform(transform_df)
+            out_df = self.nmf_fit.transform(self.df)
             return out_df
 
         if transform_test_df:
             self.nmf_test_df = self.nmf_fit.transform(self.test_df)
+
+
+    def plier(self, n_components, transform_df=False, transform_test_df=False,
+              seed=1):
+        import os
+        import subprocess
+        import tempfile
+        plier_output_dir = os.path.join(cfg.data_dir, 'plier_output')
+        if not os.path.exists(plier_output_dir):
+            os.makedirs(plier_output_dir)
+        output_prefix = os.path.join(plier_output_dir, 'plier_k{}_s{}'.format(
+                                       n_components, seed))
+        output_data = output_prefix + '_z.tsv'
+        output_weights = output_prefix + '_b.tsv'
+
+        if (not os.path.exists(output_data) or
+            not os.path.exists(output_weights)):
+            tf = tempfile.NamedTemporaryFile(mode='w')
+            self.df.to_csv(tf, sep='\t')
+            print(tf.name)
+            args = [
+                'Rscript',
+                os.path.join(cfg.scripts_dir, 'run_plier.R'),
+                '--data', tf.name,
+                '--k', str(n_components),
+                '--seed', str(seed),
+                '--output_prefix', output_prefix
+            ]
+            subprocess.check_call(args)
+            tf.close()
+
+        # This is a bit confusing, since PLIER does everything backward as
+        # compared to sklearn:
+        #
+        # - Input X has shape (n_features, n_samples)
+        # - PLIER Z matrix has shape (n_features, n_components)
+        # - PLIER B matrix has shape (n_components, n_samples)
+        #
+        # So in order to make this match the output of sklearn, set:
+        #
+        # - plier_df = PLIER B.T, has shape (n_samples, n_components)
+        # - plier_weights = PLIER B.T, has shape (n_components, n_features)
+        self.plier_df = pd.read_csv(output_weights, sep='\t').T
+        self.plier_weights = pd.read_csv(output_data, sep='\t').T
+
+        # Filter to intersection of expression genes and genes in pathway
+        # dataset (PLIER does this internally, but also need to do it here
+        # for analysis purposes)
+        test_df_filtered = self.test_df[self.plier_weights.columns.astype('str')]
+
+        if transform_df:
+            return self.plier_df
+        if transform_test_df:
+            self.plier_test_df = self._plier_on_test_data(test_df_filtered,
+                                                          self.plier_weights,
+                                                          n_components,
+                                                          seed)
 
 
     def combine_models(self, include_labels=False, include_raw=False,
@@ -161,6 +219,15 @@ class DataModel():
                 nmf_df = self.nmf_df
             all_models += [nmf_df]
 
+        if hasattr(self, 'plier_df'):
+            if test_set:
+                plier_df = pd.DataFrame(self.plier_test_df,
+                                        index=self.test_df.index,
+                                        columns=self.plier_df.columns)
+            else:
+                plier_df = self.plier_df
+            all_models += [plier_df]
+
         if include_raw:
             all_models += [self.df]
 
@@ -178,6 +245,8 @@ class DataModel():
             all_weight += [self.pca_weights]
         if hasattr(self, 'nmf_df'):
             all_weight += [self.nmf_weights]
+        if hasattr(self, 'plier_df'):
+            all_weight += [self.plier_weights]
 
         all_weight_df = pd.concat(all_weight, axis=0).T
         all_weight_df = all_weight_df.rename({'Unnamed: 0': 'entrez_gene'},
@@ -205,7 +274,6 @@ class DataModel():
         reconstruct_mat = {}
 
         if hasattr(self, 'pca_df'):
-            # Set PCA dataframe
             if test_set:
                 pca_df = self.pca_test_df
             else:
@@ -220,7 +288,6 @@ class DataModel():
                                                   columns=input_df.columns)
 
         if hasattr(self, 'nmf_df'):
-            # Set NMF dataframe
             if test_set:
                 nmf_df = self.nmf_test_df
             else:
@@ -233,8 +300,37 @@ class DataModel():
                                                   index=input_df.index,
                                                   columns=input_df.columns)
 
+        if hasattr(self, 'plier_df'):
+            # have to do filtering to genes present in pathway dataset here too
+            input_df = input_df[self.plier_weights.columns.astype('str')]
+            num_genes = len(self.plier_weights.columns)
+            if test_set:
+                plier_df = self.plier_test_df
+            else:
+                plier_df = self.plier_df
+            plier_reconstruct = np.dot(plier_df, self.plier_weights)
+            plier_recon = self._approx_keras_binary_cross_entropy(
+                plier_reconstruct, input_df, num_genes)
+            all_reconstruction['plier'] = [plier_recon]
+            reconstruct_mat['plier'] = pd.DataFrame(plier_reconstruct,
+                                                    index=input_df.index,
+                                                    columns=input_df.columns)
+
         return pd.DataFrame(all_reconstruction), reconstruct_mat
 
+    def _plier_on_test_data(self, X, B, n_components, seed):
+        """Apply PLIER latent space transformation to test data.
+
+        This uses the sklearn solver (coordinate descent in Z, by
+        default) to find a representation of the test data in the
+        latent space Z that minimizes ||X - ZB||_Fro^2, for the
+        transformation B found by PLIER.
+        """
+        solver = decomposition.NMF(n_components=n_components,
+                                   random_state=seed)
+        solver.n_components_ = n_components
+        solver.components_ = B
+        return solver.transform(X)
 
     def _approx_keras_binary_cross_entropy(self, x, z, p, epsilon=1e-07):
         """

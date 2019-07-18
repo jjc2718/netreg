@@ -10,16 +10,9 @@ process_data <- function(data) {
     # adapted from code at:
     # https://github.com/gitter-lab/prmf/blob/devel/script/PLIER/PLIER_wrapper.R#L61
 
-    # assume data has more features than observations, and
-    # features belong on rows
-    data_dim <- dim(data)
-    if (data_dim[1] < data_dim[2]) {
-        data <- t(data)
-        data_dim <- dim(data)
-    }
-
     # PLIER requires that all genes have a measurement, so
     # filter for rows that meet this requirement
+    data_dim <- dim(data)
     data_rowsums <- rowSums(data)
     inds <- which(data_rowsums != 0)
     if (length(inds) < data_dim[1]) {
@@ -36,27 +29,35 @@ run_plier <- function(args) {
     if (args$verbose) {
         cat('Loading and preprocessing data...\n')
     }
+
+    # data should be an n x p (samples x genes) matrix
     data <- read.csv(args$data, sep='\t', header=T, row.names=1, check.names=F)
     processed_data <- process_data(data)
     processed_data <- as.matrix(processed_data)
+
+    # pathways should be a genes x pathways binary matrix
+    # by default, MSigDB canonical pathways data (see PLIER paper), with
+    # gene symbols mapped to Entrez IDs (see preprocessing notebook)
     pathways <- read.csv(args$pathway_file, sep='\t', header=T, row.names=1)
     pathways <- as.matrix(pathways)
 
     if (args$verbose) {
-        cat('Running PLIER...\n')
+        cat(paste0('Running PLIER for k=', args$k,
+                   ', seed=', args$seed, '...\n'))
     }
 
-    # MSigDB canonical pathways data (see PLIER paper), with gene
-    # symbols mapped to Entrez IDs (see preprocessing notebook)
-    plierResult <- PLIER(processed_data, pathways, k=args$k, seed=args$seed)
-    write.table(plierResult$Z, file=args$output_file, quote=F, sep='\t')
+    plierResult <- PLIER(t(processed_data), pathways, k=args$k, seed=args$seed)
+    write.table(plierResult$Z, file=paste0(args$output_prefix, '_z.tsv'),
+                quote=F, sep='\t')
+    write.table(plierResult$B, file=paste0(args$output_prefix, '_b.tsv'),
+                quote=F, sep='\t')
 }
 
 main <- function() {
     parser <- ArgumentParser(description='Script to run PLIER on TCGA data')
     parser$add_argument('--data', required=T)
     parser$add_argument('--k', type='integer', required=T)
-    parser$add_argument('--output_file', required=T)
+    parser$add_argument('--output_prefix', required=T)
     parser$add_argument('--pathway_file',
                         default='data/pathway_data/canonical_mapped.tsv')
     parser$add_argument('--seed', type='integer', required=T)
