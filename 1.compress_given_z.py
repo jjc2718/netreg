@@ -126,6 +126,7 @@ for ix, seed in enumerate(random_seeds, 1):
                       ix, len(random_seeds)))
         dm.plier(n_components=args.num_components,
                  transform_test_df=True,
+                 shuffled=args.shuffle,
                  seed=seed)
 
 

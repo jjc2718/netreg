@@ -135,7 +135,7 @@ class DataModel():
 
 
     def plier(self, n_components, transform_df=False, transform_test_df=False,
-              seed=1):
+              shuffled=False, seed=1):
         import os
         import subprocess
         import tempfile
@@ -144,6 +144,8 @@ class DataModel():
             os.makedirs(plier_output_dir)
         output_prefix = os.path.join(plier_output_dir, 'plier_k{}_s{}'.format(
                                        n_components, seed))
+        if args.shuffled:
+            output_prefix += '_shuffled'
         output_data = output_prefix + '_z.tsv'
         output_weights = output_prefix + '_b.tsv'
 
