@@ -51,6 +51,9 @@ run_plier <- function(args) {
                 quote=F, sep='\t')
     write.table(plierResult$B, file=paste0(args$output_prefix, '_b.tsv'),
                 quote=F, sep='\t')
+    # regularization parameter is necessary to apply model to test data
+    write(c(plierResult$L2), file=paste0(args$output_prefix, '_l2.tsv'),
+          sep='\t')
 }
 
 main <- function() {

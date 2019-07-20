@@ -144,10 +144,11 @@ class DataModel():
             os.makedirs(plier_output_dir)
         output_prefix = os.path.join(plier_output_dir, 'plier_k{}_s{}'.format(
                                        n_components, seed))
-        if args.shuffled:
+        if shuffled:
             output_prefix += '_shuffled'
         output_data = output_prefix + '_z.tsv'
         output_weights = output_prefix + '_b.tsv'
+        output_lambda = output_prefix + '_l2.tsv'
 
         if (not os.path.exists(output_data) or
             not os.path.exists(output_weights)):
@@ -187,9 +188,7 @@ class DataModel():
             return self.plier_df
         if transform_test_df:
             self.plier_test_df = self._plier_on_test_data(test_df_filtered,
-                                                          self.plier_weights,
-                                                          n_components,
-                                                          seed)
+                                                          self.plier_weights)
 
 
     def write_models(self, output_dir, file_suffix, test_set=False):
@@ -318,7 +317,7 @@ class DataModel():
 
         return pd.DataFrame(all_reconstruction), reconstruct_mat
 
-    def _plier_on_test_data(self, X, B, n_components, seed):
+    def _plier_on_test_data(self, X, weights):
         """Apply PLIER latent space transformation to test data.
 
         This uses the sklearn solver (coordinate descent in Z, by
@@ -326,11 +325,7 @@ class DataModel():
         latent space Z that minimizes ||X - ZB||_Fro^2, for the
         transformation B found by PLIER.
         """
-        solver = decomposition.NMF(n_components=n_components,
-                                   random_state=seed)
-        solver.n_components_ = n_components
-        solver.components_ = B
-        return solver.transform(X)
+        return np.dot(X, weights.T)
 
     def _approx_keras_binary_cross_entropy(self, x, z, p, epsilon=1e-07):
         """
