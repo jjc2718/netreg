@@ -148,7 +148,7 @@ class DataModel():
             output_prefix += '_shuffled'
         output_data = output_prefix + '_z.tsv'
         output_weights = output_prefix + '_b.tsv'
-        output_lambda = output_prefix + '_l2.tsv'
+        output_l2 = output_prefix + '_l2.tsv'
 
         if (not os.path.exists(output_data) or
             not os.path.exists(output_weights)):
@@ -178,6 +178,7 @@ class DataModel():
         # - plier_weights = PLIER B.T, has shape (n_components, n_features)
         self.plier_df = pd.read_csv(output_weights, sep='\t').T
         self.plier_weights = pd.read_csv(output_data, sep='\t').T
+        plier_l2 = np.loadtxt(output_l2)
 
         # Filter to intersection of expression genes and genes in pathway
         # dataset (PLIER does this internally, but also need to do it here
@@ -188,8 +189,8 @@ class DataModel():
             return self.plier_df
         if transform_test_df:
             self.plier_test_df = self._plier_on_test_data(test_df_filtered,
-                                                          self.plier_weights)
-
+                                                          self.plier_weights,
+                                                          plier_l2)
 
     def write_models(self, output_dir, file_suffix, test_set=False):
         """Write models (z matrices) to the given file.
@@ -317,15 +318,27 @@ class DataModel():
 
         return pd.DataFrame(all_reconstruction), reconstruct_mat
 
-    def _plier_on_test_data(self, X, weights):
+    def _plier_on_test_data(self, X, weights, lambda_2):
         """Apply PLIER latent space transformation to test data.
 
-        This uses the sklearn solver (coordinate descent in Z, by
-        default) to find a representation of the test data in the
-        latent space Z that minimizes ||X - ZB||_Fro^2, for the
-        transformation B found by PLIER.
+        This uses the sklearn ridge regression solver to find a representation
+        of the test data in the latent space B that solves:
+
+            argmin_B ||X - ZB||_Fro^2 + lambda_2 ||B||_Fro^2
+
+        where X is the test data, and the transformation Z and the hyperparameter
+        lambda_2 were fit by PLIER on the training data (and thus are constants
+        here).
+
+        Note that the other terms in the PLIER loss function are constant in B,
+        so they can be ignored here.
         """
-        return np.dot(X, weights.T)
+        from sklearn.linear_model import ridge_regression
+        from scipy.stats import zscore
+        return ridge_regression(weights.T,
+                                X.apply(zscore).T,
+                                lambda_2,
+                                solver='svd')
 
     def _approx_keras_binary_cross_entropy(self, x, z, p, epsilon=1e-07):
         """
