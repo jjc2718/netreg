@@ -1,7 +1,7 @@
 """
 Module to perform fuzzy mapping of symbols to Entrez IDs.
 
-Uses MyGene for fuzzy symbol search:
+Uses MyGene for search of gene symbol aliases:
 http://docs.mygene.info/projects/mygene-py/en/latest/
 
 """
@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 def query_to_map(df_query, target_name, map_to_lists=False):
+    """Convert results of a MyGene query to a dict."""
     query_map = {}
     if 'notfound' not in df_query:
         df_query['notfound'] = np.nan
@@ -25,6 +26,7 @@ def query_to_map(df_query, target_name, map_to_lists=False):
     return query_map
 
 def invert_map(orig_map):
+    """Invert a dict, possibly containing list values."""
     inverse_map = {}
     for k, v in orig_map.items():
         for vi in v:
@@ -32,6 +34,7 @@ def invert_map(orig_map):
     return inverse_map
 
 def get_num_genes(df):
+    """Get the total number of result genes from a MyGene query."""
     num_genes = len(df)
     try:
         num_matched_genes = len(df[df['notfound'].isnull()])
@@ -40,6 +43,11 @@ def get_num_genes(df):
     return num_genes, num_matched_genes
 
 def map_loc_genes(gene_list):
+    """Map gene names beginning with 'LOC'.
+
+    See https://www.biostars.org/p/129299/ : these are genes with no
+    published symbol, and thus have the format 'LOC' + Entrez ID.
+    """
     gene_map = {}
     unmatched = []
     for gene in gene_list:
@@ -50,6 +58,7 @@ def map_loc_genes(gene_list):
     return gene_map, unmatched
 
 def fill_na(symbols_map, symbols_list):
+    """Fill symbol map with 'N/A' for unmapped symbols."""
     filled_map = symbols_map.copy()
     for s in symbols_list:
         if s not in filled_map:
@@ -57,6 +66,7 @@ def fill_na(symbols_map, symbols_list):
     return filled_map
 
 def get_list_duplicates(in_list):
+    """Identify duplicates in a list."""
     seen = set()
     duplicates = set()
     for item in in_list:
@@ -65,7 +75,30 @@ def get_list_duplicates(in_list):
         seen.add(item)
     return list(duplicates)
 
-def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
+def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
+    """Map a list of gene symbols to Entrez IDs.
+
+    Uses the MyGene API to query first for exact symbol/Entrez ID mappings,
+    then queries the same API for aliases of unmatched symbols and finds
+    mappings for the aliases.
+
+    Parameters
+    ----------
+    symbols_list : list of str
+        List of symbols to map.
+
+    verbose : bool, default=False
+        Whether or not to print information about progress/output.
+
+    sleep_time : int, default=5
+        How many seconds to sleep between calls to the MyGene API.
+
+    Returns
+    -------
+    symbol_map : (dict of str: str)
+        Maps symbols to Entrez IDs. Unidentified symbols will map
+        to the string 'N/A'.
+    """
     mg = mygene.MyGeneInfo()
 
     if verbose:
@@ -186,7 +219,7 @@ if __name__ == '__main__':
     df = pd.read_csv('./data/pathway_data/canonical_pathways.tsv',
                      sep='\t')
     test_symbols = df.index.values
-    gene_map = symbol_to_eid(test_symbols, verbose=True)
+    gene_map = symbol_to_entrez_id(test_symbols, verbose=True)
     for k, v in gene_map.items():
         if v == 'N/A':
             print('{}\t{}'.format(k, v))
