@@ -6,7 +6,6 @@ https://github.com/greenelab/tybalt/blob/master/tybalt/data_models.py
 import os
 import numpy as np
 import pandas as pd
-from scipy.stats.mstats import zscore
 from sklearn import decomposition
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
@@ -350,9 +349,9 @@ class DataModel():
             Representation of the test data in the PLIER latent space.
         """
         from sklearn.linear_model import ridge_regression
-        from scipy.stats import zscore
+        # data should already be row-normalized
         return ridge_regression(weights.T,
-                                X.apply(zscore).T,
+                                X.T,
                                 lambda_2,
                                 solver='svd')
 
