@@ -46,15 +46,13 @@ run_plier <- function(args) {
                    ', seed=', args$seed, '...\n'))
     }
 
-    # data should already be row-normalized
-    plier.result <- PLIER::PLIER(t(processed_data), pathways, k=args$k,
-                                 seed=args$seed, trace=args$verbose, scale=F)
-    write.table(plier.result$Z, file=paste0(args$output_prefix, '_z.tsv'),
+    plierResult <- PLIER(t(processed_data), pathways, k=args$k, seed=args$seed)
+    write.table(plierResult$Z, file=paste0(args$output_prefix, '_z.tsv'),
                 quote=F, sep='\t')
-    write.table(plier.result$B, file=paste0(args$output_prefix, '_b.tsv'),
+    write.table(plierResult$B, file=paste0(args$output_prefix, '_b.tsv'),
                 quote=F, sep='\t')
     # regularization parameter is necessary to apply model to test data
-    write(c(plier.result$L2), file=paste0(args$output_prefix, '_l2.tsv'),
+    write(c(plierResult$L2), file=paste0(args$output_prefix, '_l2.tsv'),
           sep='\t')
 }
 
