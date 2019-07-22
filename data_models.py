@@ -332,6 +332,22 @@ class DataModel():
 
         Note that the other terms in the PLIER loss function are constant in B,
         so they can be ignored here.
+
+        Parameters
+        ----------
+        X : array-like, [n_samples, n_features]
+            Test gene expression data.
+
+        weights : array-like, [n_components, n_features]
+            Weights found by PLIER on training data.
+
+        lambda_2 : float
+            L2 parameter returned by PLIER, used as hyperparameter in RR.
+
+        Returns
+        -------
+        array_like, [n_samples, n_components]
+            Representation of the test data in the PLIER latent space.
         """
         from sklearn.linear_model import ridge_regression
         from scipy.stats import zscore
@@ -346,13 +362,29 @@ class DataModel():
         https://github.com/keras-team/keras/blob/e6c3f77b0b10b0d76778109a40d6d3282f1cadd0/keras/losses.py#L76
         Which is a wrapper for TensorFlow `sigmoid_cross_entropy_with_logits()`
         https://www.tensorflow.org/api_docs/python/tf/nn/sigmoid_cross_entropy_with_logits
-        An important step is to clip values of reconstruction
+
+        An important step is to clip values of reconstruction: see
         https://github.com/keras-team/keras/blob/a3d160b9467c99cbb27f9aa0382c759f45c8ee66/keras/backend/tensorflow_backend.py#L3071
-        Arguments:
-        x - Reconstructed input RNAseq data
-        z - Input RNAseq data
-        p - number of features
-        epsilon - the clipping value to stabilize results (same Keras default)
+
+        Parameters
+        ----------
+        x : array of float
+            Reconstructed input RNAseq data
+
+        z : array of float
+            Input RNAseq data
+
+        p : float
+            number of features
+
+        epsilon : float
+            the clipping value to stabilize results (same Keras default)
+
+        Returns
+        -------
+        float
+            Approximation to the cross-entropy between x and z.
+
         """
         # Ensure numpy arrays
         x = np.array(x)

@@ -1,7 +1,7 @@
 """
 Module to perform fuzzy mapping of symbols to Entrez IDs.
 
-Uses MyGene for fuzzy symbol search:
+Uses MyGene for search of gene symbol aliases:
 http://docs.mygene.info/projects/mygene-py/en/latest/
 
 """
@@ -65,7 +65,30 @@ def get_list_duplicates(in_list):
         seen.add(item)
     return list(duplicates)
 
-def symbol_to_eid(symbols_list, verbose=False, sleep_time=5):
+def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
+    """Map a list of gene symbols to Entrez IDs.
+
+    Uses the MyGene API to query first for exact symbol/Entrez ID mappings,
+    then queries the same API for aliases of unmatched symbols and finds
+    mappings for the aliases.
+
+    Parameters
+    ----------
+    symbols_list : list of str
+        List of symbols to map.
+
+    verbose : bool, default=False
+        Whether or not to print information about progress/output.
+
+    sleep_time : int, default=5
+        How many seconds to sleep between calls to the MyGene API.
+
+    Returns
+    -------
+    symbol_map : (dict of str: str)
+        Maps symbols to Entrez IDs. Unidentified symbols will map
+        to the string 'N/A'.
+    """
     mg = mygene.MyGeneInfo()
 
     if verbose:
@@ -186,7 +209,7 @@ if __name__ == '__main__':
     df = pd.read_csv('./data/pathway_data/canonical_pathways.tsv',
                      sep='\t')
     test_symbols = df.index.values
-    gene_map = symbol_to_eid(test_symbols, verbose=True)
+    gene_map = symbol_to_entrez_id(test_symbols, verbose=True)
     for k, v in gene_map.items():
         if v == 'N/A':
             print('{}\t{}'.format(k, v))
