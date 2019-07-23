@@ -213,15 +213,3 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
 
     return symbol_map
 
-if __name__ == '__main__':
-    # CCDC83 has an exact match, DDX26B has an inexact match
-    # test_symbols = ['DDX26B', 'CCDC83']
-    df = pd.read_csv('./data/pathway_data/canonical_pathways.tsv',
-                     sep='\t')
-    test_symbols = df.index.values
-    gene_map = symbol_to_entrez_id(test_symbols, verbose=True)
-    for k, v in gene_map.items():
-        if v == 'N/A':
-            print('{}\t{}'.format(k, v))
-
-
