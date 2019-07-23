@@ -25,8 +25,18 @@ def query_to_map(df_query, target_name, map_to_lists=False):
             query_map[query] = row[target_name]
     return query_map
 
-def invert_map(orig_map):
-    """Invert a dict, possibly containing list values."""
+def invert_list_map(orig_map):
+    """Invert a dict mapping keys to lists.
+
+    The result is a dict as follows:
+
+    For each key: [v1, v2, ..., vN] pair in the original dict, the inverted
+    dict will have elements
+    {v1: key, v2: key, ..., vN: key}.
+
+    Warning: may cause unexpected behavior on a dict containing non-list
+    values.
+    """
     inverse_map = {}
     for k, v in orig_map.items():
         for vi in v:
