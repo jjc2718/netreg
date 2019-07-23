@@ -25,8 +25,18 @@ def query_to_map(df_query, target_name, map_to_lists=False):
             query_map[query] = row[target_name]
     return query_map
 
-def invert_map(orig_map):
-    """Invert a dict, possibly containing list values."""
+def invert_list_map(orig_map):
+    """Invert a dict mapping keys to lists.
+
+    The result is a dict as follows:
+
+    For each key: [v1, v2, ..., vN] pair in the original dict, the inverted
+    dict will have elements
+    {v1: key, v2: key, ..., vN: key}.
+
+    Warning: may cause unexpected behavior on a dict containing non-list
+    values.
+    """
     inverse_map = {}
     for k, v in orig_map.items():
         for vi in v:
@@ -115,9 +125,12 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
     # some symbols may have higher confidence results for
     # Ensembl keys, so sorting by entrezgene and dropping
     # duplicates keeps the result with an Entrez id
-    df_exact.sort_values(by='entrezgene', inplace=True)
-    df_exact = df_exact.loc[~df_exact.index.duplicated(keep='first')]
-    symbol_map = query_to_map(df_exact, 'entrezgene')
+    try:
+        df_exact.sort_values(by='entrezgene', inplace=True)
+        df_exact = df_exact.loc[~df_exact.index.duplicated(keep='first')]
+        symbol_map = query_to_map(df_exact, 'entrezgene')
+    except KeyError:
+        symbol_map = {}
 
     if verbose:
         num_genes, num_matched_genes = get_num_genes(df_exact)
@@ -160,6 +173,7 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
 
     # get rid of rows where the alias has already been matched
     df_alias = df_alias.loc[~df_alias['symbol'].isin(matched)]
+    df_alias = df_alias.loc[~df_alias['_id'].isin(list(symbol_map.values()))]
 
     # duplicates are sorted in order of MyGene confidence score,
     # so keep the most confident and drop others
@@ -175,7 +189,7 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
             num_matched_genes, len(unmatched)))
 
     alias_map = query_to_map(df_alias, 'symbol', map_to_lists=True)
-    inverse_alias_map = invert_map(alias_map)
+    inverse_alias_map = invert_list_map(alias_map)
 
     time.sleep(sleep_time)
 
@@ -214,14 +228,6 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
     return symbol_map
 
 if __name__ == '__main__':
-    # CCDC83 has an exact match, DDX26B has an inexact match
-    # test_symbols = ['DDX26B', 'CCDC83']
-    df = pd.read_csv('./data/pathway_data/canonical_pathways.tsv',
-                     sep='\t')
-    test_symbols = df.index.values
-    gene_map = symbol_to_entrez_id(test_symbols, verbose=True)
-    for k, v in gene_map.items():
-        if v == 'N/A':
-            print('{}\t{}'.format(k, v))
+    print(symbol_to_entrez_id(['CD97', 'EMR2'], verbose=True))
 
 

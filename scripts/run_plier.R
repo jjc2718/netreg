@@ -19,7 +19,6 @@ process_data <- function(data) {
         warning(paste0("Subsetting data matrix to remove rows without measurements: ",
                        data_dim[1], " -> ", length(inds)))
         data <- data[inds, ]
-        data_dim <- dim(data)
     }
     data
 }
