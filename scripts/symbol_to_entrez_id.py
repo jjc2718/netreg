@@ -125,9 +125,12 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
     # some symbols may have higher confidence results for
     # Ensembl keys, so sorting by entrezgene and dropping
     # duplicates keeps the result with an Entrez id
-    df_exact.sort_values(by='entrezgene', inplace=True)
-    df_exact = df_exact.loc[~df_exact.index.duplicated(keep='first')]
-    symbol_map = query_to_map(df_exact, 'entrezgene')
+    try:
+        df_exact.sort_values(by='entrezgene', inplace=True)
+        df_exact = df_exact.loc[~df_exact.index.duplicated(keep='first')]
+        symbol_map = query_to_map(df_exact, 'entrezgene')
+    except KeyError:
+        symbol_map = {}
 
     if verbose:
         num_genes, num_matched_genes = get_num_genes(df_exact)
@@ -170,6 +173,7 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
 
     # get rid of rows where the alias has already been matched
     df_alias = df_alias.loc[~df_alias['symbol'].isin(matched)]
+    df_alias = df_alias.loc[~df_alias['_id'].isin(list(symbol_map.values()))]
 
     # duplicates are sorted in order of MyGene confidence score,
     # so keep the most confident and drop others
@@ -185,7 +189,7 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
             num_matched_genes, len(unmatched)))
 
     alias_map = query_to_map(df_alias, 'symbol', map_to_lists=True)
-    inverse_alias_map = invert_map(alias_map)
+    inverse_alias_map = invert_list_map(alias_map)
 
     time.sleep(sleep_time)
 
@@ -222,4 +226,8 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
             total_count - na_count, total_count, len(duplicates)))
 
     return symbol_map
+
+if __name__ == '__main__':
+    print(symbol_to_entrez_id(['CD97', 'EMR2'], verbose=True))
+
 
