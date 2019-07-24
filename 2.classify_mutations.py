@@ -34,6 +34,8 @@ p.add_argument('--algorithm', default=None,
 p.add_argument('--gene_list', nargs='*', default=None,
                help='<Optional> Provide a list of genes to run\
                      mutation classification for; default is all genes')
+p.add_argument('--models_dir', default=cfg.models_dir,
+               help='where to look for compression models')
 p.add_argument('--verbose', action='store_true')
 args = p.parse_args()
 
@@ -72,8 +74,9 @@ metric_cols = [
 ]
 
 # Obtain a dictionary of file directories for loading each feature matrix (X)
-z_matrix_dict, num_models = build_feature_dictionary()
-num_models *= len(algs_to_run)
+z_matrix_dict, num_models = build_feature_dictionary(cfg.models_dir)
+num_models *= (len(algs_to_run) / len(DataModel.list_algorithms()))
+num_models = int(num_models)
 
 num_genes = len(genes_df)
 
@@ -135,17 +138,17 @@ for gene_idx, gene_series in genes_df.iterrows():
         for z_dim in z_dim_dict.keys():
             seed_z_dim_dict = z_dim_dict[z_dim]
             for seed in seed_z_dim_dict.keys():
-                z_train_file = z_matrix_dict[signal][z_dim][seed]["train"]
-                z_test_file = z_matrix_dict[signal][z_dim][seed]["test"]
-
                 for alg in algs_to_run:
+                    z_train_file = z_matrix_dict[signal][z_dim][seed][alg]["train"]
+                    z_test_file = z_matrix_dict[signal][z_dim][seed][alg]["test"]
+
                     # Load and process data
                     train_samples, x_train_df, y_train_df = align_matrices(
-                        x_file_or_df=z_train_file, y=y_df, algorithm=alg
+                        x_file_or_df=z_train_file, y=y_df
                     )
 
                     test_samples, x_test_df, y_test_df = align_matrices(
-                        x_file_or_df=z_test_file, y=y_df, algorithm=alg
+                        x_file_or_df=z_test_file, y=y_df
                     )
 
                     # Train the model

@@ -1,12 +1,12 @@
-import os
+import pathlib
 
-pj = lambda *paths: os.path.abspath(os.path.join(*paths))
+repo_root = pathlib.Path()
 
-repo_root = os.getcwd()
-
-data_dir = pj(repo_root, 'data')
-models_dir = pj(repo_root, 'models')
-results_dir = pj(repo_root, 'results')
+data_dir = repo_root.joinpath('data').resolve()
+pathway_data = data_dir.joinpath('pathway_data').resolve()
+models_dir = repo_root.joinpath('models').resolve()
+results_dir = repo_root.joinpath('results').resolve()
+scripts_dir = repo_root.joinpath('scripts').resolve()
 
 default_seed = 42
 

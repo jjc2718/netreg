@@ -24,3 +24,16 @@ conda env create --file environment.yml
 
 conda activate netreg
 ```
+
+To run PLIER, you'll have to install it from GitHub using the
+`devtools` library. Run the following from an R interactive shell/
+REPL inside the `netreg` Conda environment:
+
+```R
+library(devtools)
+install_github('wgmao/PLIER')
+
+```
+
+You should then be able to run the `library(PLIER)` command
+without errors.

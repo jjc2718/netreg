@@ -37,7 +37,7 @@ p.add_argument('-n', '--num_seeds', type=int, default=5,
                help='number of different seeds to run on current data')
 p.add_argument('-m', '--subset_mad_genes', type=int, default=8000,
                help='subset num genes based on mean absolute deviation')
-p.add_argument('-o', '--output_dir', default=cfg.models_dir,
+p.add_argument('-o', '--models_dir', default=cfg.models_dir,
                help='where to save the output files')
 p.add_argument('-s', '--shuffle', action='store_true',
                help='randomize gene expression data for negative control')
@@ -51,7 +51,7 @@ if args.verbose:
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
 # load input expression data
-logging.debug('Loading raw gene expression data...')
+logging.debug('Loading gene expression data...')
 rnaseq_train = (
     os.path.join(cfg.data_dir,
                  'train_tcga_expression_matrix_processed.tsv.gz')
@@ -80,7 +80,7 @@ else:
 
 # specify location of output files
 
-comp_out_dir = os.path.join(os.path.abspath(args.output_dir),
+comp_out_dir = os.path.join(os.path.abspath(args.models_dir),
                             'ensemble_z_matrices',
                             'components_{}'.format(args.num_components))
 
@@ -89,21 +89,20 @@ if not os.path.exists(comp_out_dir):
 
 np.random.seed(cfg.default_seed)
 random_seeds = np.random.choice(np.arange(0, 1000000), size=args.num_seeds)
-print(random_seeds); exit()
 
 reconstruction_results = []
 test_reconstruction_results = []
 
-logging.debug('Fitting compressed models...')
-recon_file = os.path.join(args.output_dir,
+logging.debug('Fitting compression models...')
+recon_file = os.path.join(args.models_dir,
                           '{}reconstruction.tsv'.format(
                           file_prefix))
 
 for ix, seed in enumerate(random_seeds, 1):
     np.random.seed(seed)
-    seed_file = os.path.join(comp_out_dir, 'model_{}'.format(seed))
+    seed_name = seed
     if args.shuffle:
-        seed_file = '{}_shuffled'.format(seed_file)
+        seed_name = '{}_shuffled'.format(seed_name)
         shuffled_train_df = shuffle_train_genes(rnaseq_train_df)
         dm = DataModel(df=shuffled_train_df,
                        test_df=rnaseq_test_df)
@@ -121,22 +120,25 @@ for ix, seed in enumerate(random_seeds, 1):
         dm.nmf(n_components=args.num_components,
                transform_test_df=True,
                seed=seed)
+    if 'plier' in algs_to_run:
+        logging.debug('-- Fitting PLIER model for random seed {} of {}'.format(
+                      ix, len(random_seeds)))
+        dm.plier(n_components=args.num_components,
+                 transform_test_df=True,
+                 shuffled=args.shuffle,
+                 seed=seed)
+
 
     # Obtain z matrix (sample scores per latent space feature) for all models
-    full_z_file = os.path.join(cfg.models_dir,
-                    '{}_z_matrix.tsv.gz'.format(seed_file))
-    dm.combine_models().to_csv(full_z_file, sep='\t', compression='gzip')
+    z_suffix = '{}_z_matrix.tsv.gz'.format(seed_name)
+    dm.write_models(comp_out_dir, z_suffix)
 
-    full_test_z_file = os.path.join(cfg.models_dir,
-                    '{}_z_test_matrix.tsv.gz'.format(seed_file))
-    dm.combine_models(test_set=True).to_csv(full_test_z_file, sep='\t',
-                                            compression='gzip')
+    test_z_suffix = '{}_z_test_matrix.tsv.gz'.format(seed_name)
+    dm.write_models(comp_out_dir, test_z_suffix, test_set=True)
 
     # Obtain weight matrices (gene by latent space feature) for all models
-    full_weight_file = os.path.join(cfg.models_dir,
-                    '{}_weight_matrix.tsv.gz'.format(seed_file))
-    dm.combine_weight_matrix().to_csv(full_weight_file, sep='\t',
-                                      compression='gzip')
+    weight_suffix = '{}_weight_matrix.tsv.gz'.format(seed_name)
+    dm.write_weight_matrices(comp_out_dir, weight_suffix)
 
     # Store reconstruction costs and reconstructed input at training end
     full_reconstruction, reconstructed_matrices = dm.compile_reconstruction()

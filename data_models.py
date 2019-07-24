@@ -3,12 +3,14 @@ Adapted from Tybalt data_models:
 https://github.com/greenelab/tybalt/blob/master/tybalt/data_models.py
 
 """
+import os
 import numpy as np
 import pandas as pd
 from scipy.stats.mstats import zscore
-
 from sklearn import decomposition
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
+import config as cfg
 
 class DataModel():
     """
@@ -93,7 +95,7 @@ class DataModel():
 
     @classmethod
     def list_algorithms(self):
-        return ['pca', 'nmf']
+        return ['pca', 'nmf', 'plier']
 
     def pca(self, n_components, transform_df=False, transform_test_df=False):
         self.pca_fit = decomposition.PCA(n_components=n_components)
@@ -105,7 +107,7 @@ class DataModel():
                                         columns=self.df.columns,
                                         index=colnames)
         if transform_df:
-            out_df = self.pca_fit.transform(transform_df)
+            out_df = self.pca_fit.transform(self.df)
             return out_df
 
         if transform_test_df:
@@ -125,64 +127,131 @@ class DataModel():
                                         columns=self.df.columns,
                                         index=colnames)
         if transform_df:
-            out_df = self.nmf_fit.transform(transform_df)
+            out_df = self.nmf_fit.transform(self.df)
             return out_df
 
         if transform_test_df:
             self.nmf_test_df = self.nmf_fit.transform(self.test_df)
 
 
-    def combine_models(self, include_labels=False, include_raw=False,
-                       test_set=False):
-        """
-        Merge z matrices together across algorithms
-        Arguments:
-        test_set - if True, output z matrix predictions for test set
-        Output:
-        pandas dataframe of all model z matrices
-        """
-        all_models = []
+    def plier(self, n_components, transform_df=False, transform_test_df=False,
+              shuffled=False, seed=1):
+        import os
+        import subprocess
+        import tempfile
+        plier_output_dir = os.path.join(cfg.data_dir, 'plier_output')
+        if not os.path.exists(plier_output_dir):
+            os.makedirs(plier_output_dir)
+        output_prefix = os.path.join(plier_output_dir, 'plier_k{}_s{}'.format(
+                                       n_components, seed))
+        if shuffled:
+            output_prefix += '_shuffled'
+        output_data = output_prefix + '_z.tsv'
+        output_weights = output_prefix + '_b.tsv'
+        output_l2 = output_prefix + '_l2.tsv'
 
+        if (not os.path.exists(output_data) or
+            not os.path.exists(output_weights)):
+            tf = tempfile.NamedTemporaryFile(mode='w')
+            self.df.to_csv(tf, sep='\t')
+            args = [
+                'Rscript',
+                os.path.join(cfg.scripts_dir, 'run_plier.R'),
+                '--data', tf.name,
+                '--k', str(n_components),
+                '--seed', str(seed),
+                '--output_prefix', output_prefix
+            ]
+            subprocess.check_call(args)
+            tf.close()
+
+        # The dimensions of matrices here are a bit confusing, since PLIER
+        # does everything backward as compared to sklearn:
+        #
+        # - Input X has shape (n_features, n_samples)
+        # - PLIER Z matrix has shape (n_features, n_components)
+        # - PLIER B matrix has shape (n_components, n_samples)
+        #
+        # So in order to make this match the output of sklearn, set:
+        #
+        # - plier_df = PLIER B.T, has shape (n_samples, n_components)
+        # - plier_weights = PLIER Z.T, has shape (n_components, n_features)
+        self.plier_df = pd.read_csv(output_weights, sep='\t').T
+        self.plier_weights = pd.read_csv(output_data, sep='\t').T
+        plier_l2 = np.loadtxt(output_l2)
+
+        # Filter to intersection of expression genes and genes in pathway
+        # dataset (PLIER does this internally, but we also need to do it here
+        # for the downstream analysis)
+        test_df_filtered = self.test_df[self.plier_weights.columns.astype('str')]
+
+        if transform_df:
+            return self.plier_df
+        if transform_test_df:
+            self.plier_test_df = self._plier_on_test_data(test_df_filtered,
+                                                          self.plier_weights,
+                                                          plier_l2)
+
+    def write_models(self, output_dir, file_suffix, test_set=False):
+        """Write models (z matrices) to the given file.
+
+        Arguments:
+        output_dir - Directory to write models to
+        file_suffix - Suffix of filename (containing, for example, the seed)
+        """
         if hasattr(self, 'pca_df'):
+            output_file = os.path.join(output_dir,
+                                       'pca_{}'.format(file_suffix))
             if test_set:
                 pca_df = pd.DataFrame(self.pca_test_df,
                                       index=self.test_df.index,
                                       columns=self.pca_df.columns)
             else:
                 pca_df = self.pca_df
-            all_models += [pca_df]
+            pca_df.to_csv(output_file, sep='\t', compression='gzip')
 
         if hasattr(self, 'nmf_df'):
+            output_file = os.path.join(output_dir,
+                                       'nmf_{}'.format(file_suffix))
             if test_set:
                 nmf_df = pd.DataFrame(self.nmf_test_df,
                                       index=self.test_df.index,
                                       columns=self.nmf_df.columns)
             else:
                 nmf_df = self.nmf_df
-            all_models += [nmf_df]
+            nmf_df.to_csv(output_file, sep='\t', compression='gzip')
 
-        if include_raw:
-            all_models += [self.df]
+        if hasattr(self, 'plier_df'):
+            output_file = os.path.join(output_dir,
+                                       'plier_{}'.format(file_suffix))
+            if test_set:
+                plier_df = pd.DataFrame(self.plier_test_df,
+                                        index=self.test_df.index,
+                                        columns=self.plier_df.columns)
+            else:
+                plier_df = self.plier_df
+            plier_df.to_csv(output_file, sep='\t', compression='gzip')
 
-        if include_labels:
-            all_models += [self.other_df]
 
-        all_df = pd.concat(all_models, axis=1)
+    def write_weight_matrices(self, output_dir, file_suffix):
+        """Write weight matrices to the given file.
 
-        return all_df
-
-
-    def combine_weight_matrix(self):
-        all_weight = []
+        Arguments:
+        output_dir - Directory to write models to
+        file_suffix - Suffix of filename (containing, for example, the seed)
+        """
         if hasattr(self, 'pca_df'):
-            all_weight += [self.pca_weights]
+            output_file = os.path.join(output_dir,
+                                       'pca_{}'.format(file_suffix))
+            self.pca_weights.to_csv(output_file, sep='\t', compression='gzip')
         if hasattr(self, 'nmf_df'):
-            all_weight += [self.nmf_weights]
-
-        all_weight_df = pd.concat(all_weight, axis=0).T
-        all_weight_df = all_weight_df.rename({'Unnamed: 0': 'entrez_gene'},
-                                             axis='columns')
-        return all_weight_df
+            output_file = os.path.join(output_dir,
+                                       'nmf_{}'.format(file_suffix))
+            self.nmf_weights.to_csv(output_file, sep='\t', compression='gzip')
+        if hasattr(self, 'plier_df'):
+            output_file = os.path.join(output_dir,
+                                       'plier_{}'.format(file_suffix))
+            self.plier_weights.to_csv(output_file, sep='\t', compression='gzip')
 
 
     def compile_reconstruction(self, test_set=False):
@@ -205,7 +274,6 @@ class DataModel():
         reconstruct_mat = {}
 
         if hasattr(self, 'pca_df'):
-            # Set PCA dataframe
             if test_set:
                 pca_df = self.pca_test_df
             else:
@@ -220,7 +288,6 @@ class DataModel():
                                                   columns=input_df.columns)
 
         if hasattr(self, 'nmf_df'):
-            # Set NMF dataframe
             if test_set:
                 nmf_df = self.nmf_test_df
             else:
@@ -233,8 +300,61 @@ class DataModel():
                                                   index=input_df.index,
                                                   columns=input_df.columns)
 
+        if hasattr(self, 'plier_df'):
+            # have to do filtering to genes present in pathway dataset here too
+            input_df = input_df[self.plier_weights.columns.astype('str')]
+            num_genes = len(self.plier_weights.columns)
+            if test_set:
+                plier_df = self.plier_test_df
+            else:
+                plier_df = self.plier_df
+            plier_reconstruct = np.dot(plier_df, self.plier_weights)
+            plier_recon = self._approx_keras_binary_cross_entropy(
+                plier_reconstruct, input_df, num_genes)
+            all_reconstruction['plier'] = [plier_recon]
+            reconstruct_mat['plier'] = pd.DataFrame(plier_reconstruct,
+                                                    index=input_df.index,
+                                                    columns=input_df.columns)
+
         return pd.DataFrame(all_reconstruction), reconstruct_mat
 
+    def _plier_on_test_data(self, X, weights, lambda_2):
+        """Apply PLIER latent space transformation to test data.
+
+        This uses the sklearn ridge regression solver to find a representation
+        of the test data in the latent space B that solves:
+
+            argmin_B ||X - ZB||_Fro^2 + lambda_2 ||B||_Fro^2
+
+        where X is the test data, and the transformation Z and the hyperparameter
+        lambda_2 were fit by PLIER on the training data (and thus are constants
+        here).
+
+        Note that the other terms in the PLIER loss function are constant in B,
+        so they can be ignored here.
+
+        Parameters
+        ----------
+        X : array-like, [n_samples, n_features]
+            Test gene expression data.
+
+        weights : array-like, [n_components, n_features]
+            Weights found by PLIER on training data.
+
+        lambda_2 : float
+            L2 parameter returned by PLIER, used as hyperparameter in RR.
+
+        Returns
+        -------
+        array_like, [n_samples, n_components]
+            Representation of the test data in the PLIER latent space.
+        """
+        from sklearn.linear_model import ridge_regression
+        from scipy.stats import zscore
+        return ridge_regression(weights.T,
+                                X.apply(zscore).T,
+                                lambda_2,
+                                solver='svd')
 
     def _approx_keras_binary_cross_entropy(self, x, z, p, epsilon=1e-07):
         """
@@ -242,13 +362,29 @@ class DataModel():
         https://github.com/keras-team/keras/blob/e6c3f77b0b10b0d76778109a40d6d3282f1cadd0/keras/losses.py#L76
         Which is a wrapper for TensorFlow `sigmoid_cross_entropy_with_logits()`
         https://www.tensorflow.org/api_docs/python/tf/nn/sigmoid_cross_entropy_with_logits
-        An important step is to clip values of reconstruction
+
+        An important step is to clip values of reconstruction: see
         https://github.com/keras-team/keras/blob/a3d160b9467c99cbb27f9aa0382c759f45c8ee66/keras/backend/tensorflow_backend.py#L3071
-        Arguments:
-        x - Reconstructed input RNAseq data
-        z - Input RNAseq data
-        p - number of features
-        epsilon - the clipping value to stabilize results (same Keras default)
+
+        Parameters
+        ----------
+        x : array of float
+            Reconstructed input RNAseq data
+
+        z : array of float
+            Input RNAseq data
+
+        p : float
+            number of features
+
+        epsilon : float
+            the clipping value to stabilize results (same Keras default)
+
+        Returns
+        -------
+        float
+            Approximation to the cross-entropy between x and z.
+
         """
         # Ensure numpy arrays
         x = np.array(x)

@@ -57,7 +57,7 @@ logging.debug('Loading pan-cancer data...')
  mut_burden_df) = load_pancancer_data()
 
 # Load and process X matrix
-logging.debug('Loading raw gene expression data...')
+logging.debug('Loading gene expression data...')
 rnaseq_train = (
     os.path.join(cfg.data_dir,
                  'train_tcga_expression_matrix_processed.tsv.gz')
