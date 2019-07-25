@@ -30,6 +30,8 @@ p = argparse.ArgumentParser()
 p.add_argument('--gene_list', nargs='*', default=None,
                help='<Optional> Provide a list of genes to run\
                      mutation classification for; default is all genes')
+p.add_argument('--results_dir', default=cfg.results_dir,
+               help='where to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
 p.add_argument('--verbose', action='store_true')
 args = p.parse_args()
