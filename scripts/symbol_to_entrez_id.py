@@ -20,7 +20,10 @@ def filter_query_result(df, entrezgene=False):
     except KeyError:
         matched_df = df
 
-    # then filter for not null entrezgene, if applicable
+    # then filter for not null entrezgene, if applicable, since some symbols
+    # may have a NaN entrezgene
+    # (why the DB distinguishes this case from symbols that are not found,
+    # I don't know)
     if entrezgene:
         try:
             matched_df = matched_df[matched_df['entrezgene'].notnull()]
@@ -150,9 +153,6 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
     except KeyError:
         symbol_map = {}
 
-    # some symbols may have a NaN entrezgene
-    # (why the DB distinguishes this case from symbols that are not found,
-    # I don't know)
 
     if verbose:
         print('-- Matched {} of {} genes'.format(
