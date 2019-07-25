@@ -37,7 +37,7 @@ run_plier <- function(args) {
     # pathways should be a genes x pathways binary matrix
     # by default, MSigDB canonical pathways data (see PLIER paper), with
     # gene symbols mapped to Entrez IDs (see preprocessing notebook)
-    pathways <- read.csv(args$pathway_file, sep='\t', header=T, row.names=1)
+    pathways <- read.csv(args$pathways_file, sep='\t', header=T, row.names=1)
     pathways <- as.matrix(pathways)
 
     if (args$verbose) {
@@ -60,7 +60,7 @@ main <- function() {
     parser$add_argument('--data', required=T)
     parser$add_argument('--k', type='integer', required=T)
     parser$add_argument('--output_prefix', required=T)
-    parser$add_argument('--pathway_file',
+    parser$add_argument('--pathways_file',
                         default='data/pathway_data/canonical_mapped.tsv')
     parser$add_argument('--seed', type='integer', required=T)
     parser$add_argument('--verbose', action='store_true')

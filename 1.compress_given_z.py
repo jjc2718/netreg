@@ -39,6 +39,10 @@ p.add_argument('-m', '--subset_mad_genes', type=int, default=8000,
                help='subset num genes based on mean absolute deviation')
 p.add_argument('-o', '--models_dir', default=cfg.models_dir,
                help='where to save the output files')
+p.add_argument('-p', '--pathways_file',
+               default=os.path.join(cfg.pathway_data, 'canonical_mapped.tsv'),
+               help='pathways file to use for PLIER, see\
+                     0B.preprocess_plier_data.ipynb for file format')
 p.add_argument('-s', '--shuffle', action='store_true',
                help='randomize gene expression data for negative control')
 p.add_argument('-v', '--verbose', action='store_true')
@@ -124,6 +128,7 @@ for ix, seed in enumerate(random_seeds, 1):
         logging.debug('-- Fitting PLIER model for random seed {} of {}'.format(
                       ix, len(random_seeds)))
         dm.plier(n_components=args.num_components,
+                 pathways_file=args.pathways_file,
                  transform_test_df=True,
                  shuffled=args.shuffle,
                  seed=seed)

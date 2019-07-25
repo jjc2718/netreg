@@ -134,8 +134,8 @@ class DataModel():
             self.nmf_test_df = self.nmf_fit.transform(self.test_df)
 
 
-    def plier(self, n_components, transform_df=False, transform_test_df=False,
-              shuffled=False, seed=1):
+    def plier(self, n_components, pathways_file, transform_df=False,
+              transform_test_df=False, shuffled=False, seed=1):
         import os
         import subprocess
         import tempfile
@@ -160,6 +160,7 @@ class DataModel():
                 '--data', tf.name,
                 '--k', str(n_components),
                 '--seed', str(seed),
+                '--pathways_file', pathways_file,
                 '--output_prefix', output_prefix
             ]
             subprocess.check_call(args)
