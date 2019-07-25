@@ -28,24 +28,24 @@ def run_compression(algorithm, k):
                    '-p', str(pathway_file),
                    '-o', str(cfg.models_dir.joinpath(pathway_dir).resolve())]
             print('Running: {}'.format(' '.join(cmd)))
-            # subprocess.check_call(cmd)
+            subprocess.check_call(cmd)
             cmd = ['python', '1.compress_given_z.py',
                    '-a', alg, '-k', str(k), '-s', '-v',
                    '-p', str(pathway_file),
                    '-o', str(cfg.models_dir.joinpath(pathway_dir).resolve())]
             print('Running: {}'.format(' '.join(cmd)))
-            # subprocess.check_call(cmd)
+            subprocess.check_call(cmd)
     else:
         cmd = ['python', '1.compress_given_z.py',
                '-a', alg, '-k', str(k), '-v',
                '-o', str(cfg.models_dir.joinpath('canonical_pathways').resolve())]
         print('Running: {}'.format(' '.join(cmd)))
-        # subprocess.check_call(cmd)
+        subprocess.check_call(cmd)
         cmd = ['python', '1.compress_given_z.py',
                '-a', alg, '-k', str(k), '-s', '-v',
                '-o', str(cfg.models_dir.joinpath('canonical_pathways').resolve())]
         print('Running: {}'.format(' '.join(cmd)))
-        # subprocess.check_call(cmd)
+        subprocess.check_call(cmd)
 
 # first run compression step
 for k in k_vals:
@@ -59,13 +59,13 @@ for pathway_dir in pathway_map.values():
             '--m', str(cfg.models_dir.joinpath(pathway_dir).resolve()),
             '--r', str(cfg.results_dir.joinpath(pathway_dir).resolve())]
     print('Running: {}'.format(' '.join(cmd)))
-    # subprocess.check_call(cmd)
+    subprocess.check_call(cmd)
 
 # then run classification using raw expression values as a baseline
 cmd = ['python', '3.classify_with_raw_expression.py',
         '--v', '--g', ' '.join(genes),
         '--r', str(cfg.results_dir.joinpath('canonical_pathways').resolve())]
 print('Running: {}'.format(' '.join(cmd)))
-# subprocess.check_call(cmd)
+subprocess.check_call(cmd)
 
 
