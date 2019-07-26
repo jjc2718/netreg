@@ -8,9 +8,11 @@ dependencies:
   - bioconductor-qvalue=2.2.2
   - dask=2.0.0
   - dask-ml=1.0.0
+  - matplotlib=3.1.0
   - numpy=1.16.4
   - pandas=0.24.2
   - python=3.6.8
+  - pytest=5.0.0
   - r=3.6.0
   - r-argparse=2.0.1
   - r-devtools=2.0.2
@@ -18,5 +20,6 @@ dependencies:
   - r-rcolorbrewer=1.1_2
   - scikit-learn=0.21.2
   - scipy=1.2.1
+  - seaborn=0.9.0
   - r-base=3.6.0
 
