@@ -119,7 +119,7 @@ for gene_idx, gene_series in genes_df.iterrows():
     gene_metrics_list = []
 
     # Create directory for the gene
-    gene_dir = os.path.join(cfg.results_dir, "mutation", gene_name)
+    gene_dir = os.path.join(args.results_dir, "mutation", gene_name)
     os.makedirs(gene_dir, exist_ok=True)
 
     # Check if gene has been processed already
