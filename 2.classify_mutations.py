@@ -36,6 +36,8 @@ p.add_argument('--gene_list', nargs='*', default=None,
                      mutation classification for; default is all genes')
 p.add_argument('--models_dir', default=cfg.models_dir,
                help='where to look for compression models')
+p.add_argument('--results_dir', default=cfg.results_dir,
+               help='where to write results to')
 p.add_argument('--verbose', action='store_true')
 args = p.parse_args()
 
@@ -74,7 +76,7 @@ metric_cols = [
 ]
 
 # Obtain a dictionary of file directories for loading each feature matrix (X)
-z_matrix_dict, num_models = build_feature_dictionary(cfg.models_dir)
+z_matrix_dict, num_models = build_feature_dictionary(args.models_dir)
 num_models *= (len(algs_to_run) / len(DataModel.list_algorithms()))
 num_models = int(num_models)
 
@@ -92,7 +94,7 @@ for gene_idx, gene_series in genes_df.iterrows():
     gene_metrics_list = []
 
     # Create directory for the gene
-    gene_dir = os.path.join(cfg.results_dir, "mutation", gene_name)
+    gene_dir = os.path.join(args.results_dir, "mutation", gene_name)
     os.makedirs(gene_dir, exist_ok=True)
 
     # Check if gene has been processed already

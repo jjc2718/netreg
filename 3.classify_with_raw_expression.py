@@ -30,6 +30,8 @@ p = argparse.ArgumentParser()
 p.add_argument('--gene_list', nargs='*', default=None,
                help='<Optional> Provide a list of genes to run\
                      mutation classification for; default is all genes')
+p.add_argument('--results_dir', default=cfg.results_dir,
+               help='where to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
 p.add_argument('--verbose', action='store_true')
 args = p.parse_args()
@@ -117,7 +119,7 @@ for gene_idx, gene_series in genes_df.iterrows():
     gene_metrics_list = []
 
     # Create directory for the gene
-    gene_dir = os.path.join(cfg.results_dir, "mutation", gene_name)
+    gene_dir = os.path.join(args.results_dir, "mutation", gene_name)
     os.makedirs(gene_dir, exist_ok=True)
 
     # Check if gene has been processed already

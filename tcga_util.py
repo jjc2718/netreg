@@ -109,6 +109,7 @@ def build_feature_dictionary(models_dir, load_data=False, store_train_test="both
 
             pattern = ("{}/*shuffled_z_*" if signal == 'shuffled'
                                           else "{}/*_z_*")
+
             for z_file in glob.glob(pattern.format(matrix_comp_dir)):
 
                 if signal == 'signal' and 'shuffled' in z_file:
@@ -142,7 +143,6 @@ def build_feature_dictionary(models_dir, load_data=False, store_train_test="both
                         )
                     else:
                         z_matrix_dict[signal][z_dim][seed][alg]["train"] = z_file
-
 
     return z_matrix_dict, num_models
 
