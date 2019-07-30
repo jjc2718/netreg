@@ -95,7 +95,7 @@ class DataModel():
 
     @classmethod
     def list_algorithms(self):
-        return ['pca', 'nmf', 'plier']
+        return ['pca', 'sparse_pca', 'nmf', 'plier']
 
     def pca(self, n_components, transform_df=False, transform_test_df=False):
         self.pca_fit = decomposition.PCA(n_components=n_components)
@@ -112,6 +112,28 @@ class DataModel():
 
         if transform_test_df:
             self.pca_test_df = self.pca_fit.transform(self.test_df)
+
+
+    def sparse_pca(self, n_components, transform_df=False,
+                   transform_test_df=False,alpha=1, seed=1):
+        self.spca_fit = decomposition.MiniBatchSparsePCA(n_components=n_components,
+                                                         batch_size=50,
+                                                         alpha=alpha,
+                                                         random_state=seed,
+                                                         normalize_components=True)
+        self.spca_df = self.spca_fit.fit_transform(self.df)
+        colnames = ['sparse_pca_{}'.format(x) for x in range(0, n_components)]
+        self.spca_df = pd.DataFrame(self.spca_df, index=self.df.index,
+                                    columns=colnames)
+        self.spca_weights = pd.DataFrame(self.spca_fit.components_,
+                                        columns=self.df.columns,
+                                        index=colnames)
+        if transform_df:
+            out_df = self.spca_fit.transform(self.df)
+            return out_df
+
+        if transform_test_df:
+            self.spca_test_df = self.spca_fit.transform(self.test_df)
 
 
     def nmf(self, n_components, transform_df=False, transform_test_df=False,

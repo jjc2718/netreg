@@ -75,7 +75,9 @@ if args.subset_mad_genes is not None:
         rnaseq_train_df, rnaseq_test_df, mad_file, args.subset_mad_genes)
 
 dm = DataModel(df=rnaseq_train_df, test_df=rnaseq_test_df)
-dm.transform(how='zeroone')
+# TODO: zscore can't be used with NMF, need to implement a
+# way to do per-algorithm transformations
+dm.transform(how='zscore')
 
 if args.shuffle:
     file_prefix = '{}_components_shuffled_'.format(args.num_components)
@@ -115,9 +117,14 @@ for ix, seed in enumerate(random_seeds, 1):
     if 'pca' in algs_to_run:
         logging.debug('-- Fitting pca model for random seed {} of {}'.format(
                       ix, len(random_seeds)))
-
         dm.pca(n_components=args.num_components,
                transform_test_df=True)
+    if 'sparse_pca' in algs_to_run:
+        logging.debug('-- Fitting sparse pca model for random seed {} of {}'.format(
+                      ix, len(random_seeds)))
+        dm.sparse_pca(n_components=args.num_components,
+                      transform_test_df=True,
+                      seed=seed)
     if 'nmf' in algs_to_run:
         logging.debug('-- Fitting nmf model for random seed {} of {}'.format(
                       ix, len(random_seeds)))
