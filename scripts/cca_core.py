@@ -333,7 +333,7 @@ def robust_cca_similarity(acts1, acts2, threshold=0.98, compute_dirns=True,
     try:
       return_dict = get_cca_similarity(acts1, acts2, threshold, compute_dirns,
                                        verbose=verbose)
-    except np.LinAlgError:
+    except np.linalg.LinAlgError:
       acts1 = acts1 * 1e-1 + np.random.normal(size=acts1.shape) * epsilon
       acts2 = acts2 * 1e-1 + np.random.normal(size=acts1.shape) * epsilon
       if trial + 1 == num_cca_trials:
