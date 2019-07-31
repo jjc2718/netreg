@@ -119,12 +119,12 @@ for ix, seed in enumerate(random_seeds, 1):
                       ix, len(random_seeds)))
         dm.pca(n_components=args.num_components,
                transform_test_df=True)
-    if 'sparse_pca' in algs_to_run:
-        logging.debug('-- Fitting sparse pca model for random seed {} of {}'.format(
+    if 'ica' in algs_to_run:
+        logging.debug('-- Fitting ica model for random seed {} of {}'.format(
                       ix, len(random_seeds)))
-        dm.sparse_pca(n_components=args.num_components,
-                      transform_test_df=True,
-                      seed=seed)
+        dm.ica(n_components=args.num_components,
+               transform_test_df=True,
+               seed=seed)
     if 'nmf' in algs_to_run:
         logging.debug('-- Fitting nmf model for random seed {} of {}'.format(
                       ix, len(random_seeds)))

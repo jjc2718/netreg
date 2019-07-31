@@ -95,7 +95,7 @@ class DataModel():
 
     @classmethod
     def list_algorithms(self):
-        return ['pca', 'sparse_pca', 'nmf', 'plier']
+        return ['pca', 'ica', 'nmf', 'plier']
 
     def pca(self, n_components, transform_df=False, transform_test_df=False):
         self.pca_fit = decomposition.PCA(n_components=n_components)
@@ -114,26 +114,23 @@ class DataModel():
             self.pca_test_df = self.pca_fit.transform(self.test_df)
 
 
-    def sparse_pca(self, n_components, transform_df=False,
-                   transform_test_df=False,alpha=1, seed=1):
-        self.spca_fit = decomposition.MiniBatchSparsePCA(n_components=n_components,
-                                                         batch_size=50,
-                                                         alpha=alpha,
-                                                         random_state=seed,
-                                                         normalize_components=True)
-        self.spca_df = self.spca_fit.fit_transform(self.df)
-        colnames = ['sparse_pca_{}'.format(x) for x in range(0, n_components)]
-        self.spca_df = pd.DataFrame(self.spca_df, index=self.df.index,
+    def ica(self, n_components, transform_df=False, transform_test_df=False,
+            seed=1):
+        self.ica_fit = decomposition.FastICA(n_components=n_components,
+                                             random_state=seed)
+        self.ica_df = self.ica_fit.fit_transform(self.df)
+        colnames = ['ica_{}'.format(x) for x in range(0, n_components)]
+        self.ica_df = pd.DataFrame(self.ica_df, index=self.df.index,
                                     columns=colnames)
-        self.spca_weights = pd.DataFrame(self.spca_fit.components_,
+        self.ica_weights = pd.DataFrame(self.ica_fit.components_,
                                         columns=self.df.columns,
                                         index=colnames)
         if transform_df:
-            out_df = self.spca_fit.transform(self.df)
+            out_df = self.ica_fit.transform(self.df)
             return out_df
 
         if transform_test_df:
-            self.spca_test_df = self.spca_fit.transform(self.test_df)
+            self.ica_test_df = self.ica_fit.transform(self.test_df)
 
 
     def nmf(self, n_components, transform_df=False, transform_test_df=False,
@@ -233,6 +230,17 @@ class DataModel():
                 pca_df = self.pca_df
             pca_df.to_csv(output_file, sep='\t', compression='gzip')
 
+        if hasattr(self, 'ica_df'):
+            output_file = os.path.join(output_dir,
+                                       'ica_{}'.format(file_suffix))
+            if test_set:
+                ica_df = pd.DataFrame(self.ica_test_df,
+                                      index=self.test_df.index,
+                                      columns=self.ica_df.columns)
+            else:
+                ica_df = self.ica_df
+            ica_df.to_csv(output_file, sep='\t', compression='gzip')
+
         if hasattr(self, 'nmf_df'):
             output_file = os.path.join(output_dir,
                                        'nmf_{}'.format(file_suffix))
@@ -267,6 +275,10 @@ class DataModel():
             output_file = os.path.join(output_dir,
                                        'pca_{}'.format(file_suffix))
             self.pca_weights.to_csv(output_file, sep='\t', compression='gzip')
+        if hasattr(self, 'ica_df'):
+            output_file = os.path.join(output_dir,
+                                       'ica_{}'.format(file_suffix))
+            self.ica_weights.to_csv(output_file, sep='\t', compression='gzip')
         if hasattr(self, 'nmf_df'):
             output_file = os.path.join(output_dir,
                                        'nmf_{}'.format(file_suffix))
@@ -307,6 +319,20 @@ class DataModel():
                 pca_reconstruct, input_df, self.num_genes)
             all_reconstruction['pca'] = [pca_recon]
             reconstruct_mat['pca'] = pd.DataFrame(pca_reconstruct,
+                                                  index=input_df.index,
+                                                  columns=input_df.columns)
+
+        if hasattr(self, 'ica_df'):
+            if test_set:
+                ica_df = self.ica_test_df
+            else:
+                ica_df = self.ica_df
+
+            ica_reconstruct = self.ica_fit.inverse_transform(ica_df)
+            ica_recon = self._approx_keras_binary_cross_entropy(
+                ica_reconstruct, input_df, self.num_genes)
+            all_reconstruction['ica'] = [ica_recon]
+            reconstruct_mat['ica'] = pd.DataFrame(ica_reconstruct,
                                                   index=input_df.index,
                                                   columns=input_df.columns)
 
