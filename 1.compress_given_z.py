@@ -75,7 +75,9 @@ if args.subset_mad_genes is not None:
         rnaseq_train_df, rnaseq_test_df, mad_file, args.subset_mad_genes)
 
 dm = DataModel(df=rnaseq_train_df, test_df=rnaseq_test_df)
-dm.transform(how='zeroone')
+# TODO: per-algorithm transformations (e.g. NMF doesn't work with negative
+# values, PLIER doesn't work with zeros)
+dm.transform(how='zscore')
 
 if args.shuffle:
     file_prefix = '{}_components_shuffled_'.format(args.num_components)
@@ -110,14 +112,19 @@ for ix, seed in enumerate(random_seeds, 1):
         shuffled_train_df = shuffle_train_genes(rnaseq_train_df)
         dm = DataModel(df=shuffled_train_df,
                        test_df=rnaseq_test_df)
-        dm.transform(how='zeroone')
+        dm.transform(how='zscore')
 
     if 'pca' in algs_to_run:
         logging.debug('-- Fitting pca model for random seed {} of {}'.format(
                       ix, len(random_seeds)))
-
         dm.pca(n_components=args.num_components,
                transform_test_df=True)
+    if 'ica' in algs_to_run:
+        logging.debug('-- Fitting ica model for random seed {} of {}'.format(
+                      ix, len(random_seeds)))
+        dm.ica(n_components=args.num_components,
+               transform_test_df=True,
+               seed=seed)
     if 'nmf' in algs_to_run:
         logging.debug('-- Fitting nmf model for random seed {} of {}'.format(
                       ix, len(random_seeds)))
