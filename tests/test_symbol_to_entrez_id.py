@@ -4,7 +4,7 @@ import numpy as np
 
 import sys; sys.path.append('.')
 import config as cfg
-from scripts.symbol_to_entrez_id import symbol_to_entrez_id
+from utilities.symbol_to_entrez_id import symbol_to_entrez_id
 
 class SymbolConversionTest(unittest.TestCase):
 
