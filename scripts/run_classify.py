@@ -16,8 +16,7 @@ pathway_map = {
 }
 
 k_vals = [10, 20, 50, 100, 200]
-# algorithms = DataModel.list_algorithms()
-algorithms = ['pca', 'sparse_pca']
+algorithms = DataModel.list_algorithms()
 # gene list from BioBombe paper, just do these for now
 genes = ['TP53', 'PTEN', 'PIK3CA', 'KRAS', 'TTN']
 
