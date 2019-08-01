@@ -37,7 +37,7 @@ def get_matrices_from_files(files, gene_subset, shuffled=False):
 
 def calculate_avg_cca(z_dims, models_map, overlap=False, verbose=False):
     import itertools
-    import scripts.cca_core as cca_core
+    import utilities.cca_core as cca_core
 
     algorithms = list(models_map.keys())
     avg_cca_mtx = {z_dim: np.zeros((len(algorithms), len(algorithms))) for z_dim in z_dims}
