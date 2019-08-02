@@ -36,7 +36,7 @@ class ShapesTest(unittest.TestCase):
 
 
     def test_pca_output(self):
-        """Test dimensions of PCA output. """
+        """Test dimensions of PCA output."""
         n_train, n_test, p, k = self.n_train, self.n_test, self.p, self.k
         dm = DataModel(df=self.exp_data_train, test_df=self.exp_data_test)
         dm.transform(how='zscore')
@@ -65,7 +65,7 @@ class ShapesTest(unittest.TestCase):
 
 
     def test_plier_output(self):
-        """Test dimensions of PLIER output. """
+        """Test dimensions of PLIER output."""
         n_train, n_test, p, k, m = self.n_train, self.n_test, self.p, self.k, self.m
         pathways_file = self._generate_and_save_pathways(p, m)
         dm = DataModel(df=self.exp_data_train, test_df=self.exp_data_test)
