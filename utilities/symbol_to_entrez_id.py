@@ -248,7 +248,3 @@ def symbol_to_entrez_id(symbols_list, verbose=False, sleep_time=5):
 
     return symbol_map
 
-if __name__ == '__main__':
-    print(symbol_to_entrez_id(['BRAF', 'ILT10', 'LILRP2'], verbose=True))
-
-
