@@ -36,6 +36,7 @@ class ShapesTest(unittest.TestCase):
 
 
     def test_pca_output(self):
+        """Test dimensions of PCA output. """
         n_train, n_test, p, k = self.n_train, self.n_test, self.p, self.k
         dm = DataModel(df=self.exp_data_train, test_df=self.exp_data_test)
         dm.transform(how='zscore')
@@ -46,6 +47,11 @@ class ShapesTest(unittest.TestCase):
 
 
     def _generate_and_save_pathways(self, p, m):
+        """Function to generate random pathways and save in a temporary file.
+
+        File is closed but not deleted, so code that calls this function
+        must delete the file after it is used.
+        """
         # it really doesn't matter exactly what the simulated pathways are,
         # this is just used for testing that dimensions are correct
         pathways = pd.DataFrame(np.random.randint(2, size=(p, m)),
@@ -59,8 +65,7 @@ class ShapesTest(unittest.TestCase):
 
 
     def test_plier_output(self):
-        # TODO: test flag to dm.plier() so it will automatically clean up
-        # cached PLIER results (and possibly save them somewhere local?)
+        """Test dimensions of PLIER output. """
         n_train, n_test, p, k, m = self.n_train, self.n_test, self.p, self.k, self.m
         pathways_file = self._generate_and_save_pathways(p, m)
         dm = DataModel(df=self.exp_data_train, test_df=self.exp_data_test)
