@@ -45,7 +45,7 @@ Conda environment). Once this module is installed, you can run the tests
 by executing the command
 
 ```shell
-python -m pytest tests
+pytest tests/
 ```
 
 from the repo root.
