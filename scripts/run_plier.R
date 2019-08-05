@@ -3,7 +3,7 @@ suppressPackageStartupMessages(library(argparse))
 
 # install PLIER from GitHub if not already installed (PLIER
 # is not available through Conda)
-suppressPackageStartupMessages(install_github('wgmao/PLIER'))
+suppressMessages(install_github('wgmao/PLIER'))
 suppressPackageStartupMessages(library(PLIER))
 
 process_data <- function(data) {
@@ -45,7 +45,16 @@ run_plier <- function(args) {
                    ', seed=', args$seed, '...\n'))
     }
 
-    plierResult <- PLIER(t(processed_data), pathways, k=args$k, seed=args$seed)
+    if (args$verbose) {
+        plierResult <- PLIER(t(processed_data), pathways, k=args$k, seed=args$seed,
+                             scale=F)
+    } else {
+        plierResult <- suppressWarnings(suppressMessages(PLIER(t(processed_data),
+                                                               pathways,
+                                                               k=args$k,
+                                                               seed=args$seed,
+                                                               scale=F)))
+    }
     write.table(plierResult$Z, file=paste0(args$output_prefix, '_z.tsv'),
                 quote=F, sep='\t')
     write.table(plierResult$B, file=paste0(args$output_prefix, '_b.tsv'),

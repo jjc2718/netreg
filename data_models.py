@@ -93,9 +93,11 @@ class DataModel():
                                         index=self.test_df.index,
                                         columns=self.test_df.columns)
 
+
     @classmethod
     def list_algorithms(self):
         return ['pca', 'ica', 'nmf', 'plier']
+
 
     def pca(self, n_components, transform_df=False, transform_test_df=False):
         self.pca_fit = decomposition.PCA(n_components=n_components)
@@ -154,10 +156,12 @@ class DataModel():
 
 
     def plier(self, n_components, pathways_file, transform_df=False,
-              transform_test_df=False, shuffled=False, seed=1):
-        import os
+              transform_test_df=False, shuffled=False, seed=1,
+              verbose=False, skip_cache=False):
+
         import subprocess
         import tempfile
+
         plier_output_dir = os.path.join(cfg.data_dir, 'plier_output')
         if not os.path.exists(plier_output_dir):
             os.makedirs(plier_output_dir)
@@ -169,21 +173,34 @@ class DataModel():
         output_weights = output_prefix + '_b.tsv'
         output_l2 = output_prefix + '_l2.tsv'
 
-        if (not os.path.exists(output_data) or
-            not os.path.exists(output_weights)):
-            tf = tempfile.NamedTemporaryFile(mode='w')
+        if skip_cache or (not os.path.exists(output_data) or
+                          not os.path.exists(output_weights)):
+
+            # Warning:
+            # If the temporary file for the expression data is still open for
+            # writing when PLIER is trying to read it, it may cause issues.
+            #
+            # Thus, open the file with delete=False here, then clean up the
+            # temporary file manually after PLIER is finished running.
+            tf = tempfile.NamedTemporaryFile(mode='w', delete=False)
+            expression_filename = tf.name
             self.df.to_csv(tf, sep='\t')
+            tf.close()
+
             args = [
                 'Rscript',
                 os.path.join(cfg.scripts_dir, 'run_plier.R'),
-                '--data', tf.name,
+                '--data', expression_filename,
                 '--k', str(n_components),
                 '--seed', str(seed),
                 '--pathways_file', pathways_file,
-                '--output_prefix', output_prefix
+                '--output_prefix', output_prefix,
             ]
+            if verbose:
+                args.append('--verbose')
             subprocess.check_call(args)
-            tf.close()
+
+            os.remove(expression_filename)
 
         # The dimensions of matrices here are a bit confusing, since PLIER
         # does everything backward as compared to sklearn:
@@ -200,6 +217,16 @@ class DataModel():
         self.plier_weights = pd.read_csv(output_data, sep='\t').T
         plier_l2 = np.loadtxt(output_l2)
 
+        if skip_cache:
+            # If we're using the skip_cache option, clean up the results files
+            # created by PLIER.
+            #
+            # This is particularly useful for, e.g., unit tests that should be
+            # run repeatedly without saving results.
+            os.remove(output_data)
+            os.remove(output_weights)
+            os.remove(output_l2)
+
         # Filter to intersection of expression genes and genes in pathway
         # dataset (PLIER does this internally, but we also need to do it here
         # for the downstream analysis)
@@ -211,6 +238,7 @@ class DataModel():
             self.plier_test_df = self._plier_on_test_data(test_df_filtered,
                                                           self.plier_weights,
                                                           plier_l2)
+
 
     def write_models(self, output_dir, file_suffix, test_set=False):
         """Write models (z matrices) to the given file.
@@ -367,6 +395,7 @@ class DataModel():
 
         return pd.DataFrame(all_reconstruction), reconstruct_mat
 
+
     def _plier_on_test_data(self, X, weights, lambda_2):
         """Apply PLIER latent space transformation to test data.
 
@@ -404,6 +433,7 @@ class DataModel():
                                 X.apply(zscore).T,
                                 lambda_2,
                                 solver='svd')
+
 
     def _approx_keras_binary_cross_entropy(self, x, z, p, epsilon=1e-07):
         """
@@ -448,3 +478,4 @@ class DataModel():
 
         # Return approximate binary cross entropy
         return np.mean(p * np.mean(- x * z + np.log(1 + np.exp(x)), axis=-1))
+

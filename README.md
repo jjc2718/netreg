@@ -37,3 +37,15 @@ install_github('wgmao/PLIER')
 
 You should then be able to run the `library(PLIER)` command
 without errors.
+
+## Running tests
+
+Running the tests requires the `pytest` module (included in the specified
+Conda environment). Once this module is installed, you can run the tests
+by executing the command
+
+```shell
+pytest tests/
+```
+
+from the repo root.

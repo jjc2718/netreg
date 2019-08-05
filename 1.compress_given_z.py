@@ -138,7 +138,8 @@ for ix, seed in enumerate(random_seeds, 1):
                  pathways_file=args.pathways_file,
                  transform_test_df=True,
                  shuffled=args.shuffle,
-                 seed=seed)
+                 seed=seed,
+                 verbose=args.verbose)
 
 
     # Obtain z matrix (sample scores per latent space feature) for all models
