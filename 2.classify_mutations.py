@@ -34,7 +34,8 @@ p.add_argument('--algorithm', default=None,
 p.add_argument('--gene_list', nargs='*', default=None,
                help='<Optional> Provide a list of genes to run\
                      mutation classification for; default is all genes')
-p.add_argument('--models_dir', default=cfg.models_dir,
+p.add_argument('--models_dir',
+               default=os.path.join(cfg.models_dir, 'canonical_pathways'),
                help='where to look for compression models')
 p.add_argument('--results_dir', default=cfg.results_dir,
                help='where to write results to')
@@ -176,7 +177,7 @@ for gene_idx, gene_series in genes_df.iterrows():
                         n_folds=cfg.folds,
                         max_iter=cfg.max_iter,
                     )
-                    # Get metric  predictions
+                    # Get metric predictions
                     y_train_results = get_threshold_metrics(
                         y_train_df.status, y_pred_train_df, drop=False
                     )
