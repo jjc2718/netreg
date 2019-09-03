@@ -10,6 +10,7 @@ import torch.nn as nn
 import torch.utils.data as data_utils
 
 class LogisticRegression(nn.Module):
+    """Define model for PyTorch logistic regression."""
 
     def __init__(self, input_size):
         super(LogisticRegression, self).__init__()
@@ -23,7 +24,32 @@ class LogisticRegression(nn.Module):
 def get_params_map(param_choices, num_iters=10, seed=1):
     """Get random combinations of hyperparameters to search over.
 
-    TODO more documentation needed
+    Currently combinations are selected with replacement, i.e. duplicates can
+    happen.
+
+    TODO: could make this sample from continuous distributions too,
+    might be useful for some params
+
+    Parameters
+    ----------
+    param_choices: dict, (str: list)
+        Maps hyperparameter names to choices (currently only works with
+        discrete values). Example:
+        param_choices = {
+            'learning_rate': [0.005, 0.001, 0.0001, 0.00005],
+            'batch_size': [10, 20, 50, 100],
+            'num_epochs': [200, 500, 1000],
+            'l1_penalty': [0, 0.01, 0.1, 1, 10]
+        }
+
+    num_iters : int
+        The number of combinations to search over.
+
+    Returns
+    -------
+    dict, (str: list)
+        Maps hyperparameter names to lists of values to try.
+
     """
     import random; random.seed(seed)
     # sorting here ensures that results for models that share the same
@@ -34,82 +60,75 @@ def get_params_map(param_choices, num_iters=10, seed=1):
                      for p, vals in param_options}
     return params_map
 
-def torch_param_selection(X_train,
-                          y_train,
-                          params_map,
-                          num_folds,
-                          seed=1,
-                          use_gpu=False,
-                          verbose=False):
-    """do the thing.
+def train_torch_model(X_train, X_test,
+                      y_train, y_test,
+                      params_map,
+                      num_inner_folds=4,
+                      seed=1,
+                      use_gpu=False,
+                      verbose=False):
+    """Wrapper function for PyTorch model training.
 
-    Dataset terminology: (subtrain | tune) = train | test
-    (avoiding the term "validation" since it's overloaded in biology)
+    If multiple hyperparameter choices are provided, get the best
+    set of hyperparameters from a random search. Otherwise, just use
+    the hyperparameters provided to train/evaluate the model.
     """
-    # k-fold cross-validation over the training data
-    kf = KFold(n_splits=num_folds, shuffle=True, random_state=seed)
-    results_df = None
-    for fold, (subtrain_ixs, tune_ixs) in enumerate(kf.split(X_train), 1):
-        X_subtrain, X_tune = X_train[subtrain_ixs], X_train[tune_ixs]
-        y_subtrain, y_tune = y_train[subtrain_ixs], y_train[tune_ixs]
-        if verbose:
-            print('Running CV fold {} of {}'.format(fold, num_folds))
-        result_df = torch_tuning(X_subtrain, X_tune,
-                                 y_subtrain, y_tune,
-                                 params_map, use_gpu,
-                                 verbose)
-        result_df['fold'] = fold
-        if results_df is None:
-            results_df = result_df
-        else:
-            results_df = pd.concat((results_df, result_df), ignore_index=True)
+    min_params_length = min(len(vs) for k, vs in params_map.items())
+    if min_params_length > 1:
+        results_df, best_params = torch_param_selection(X_train, y_train,
+                                                        params_map,
+                                                        num_inner_folds,
+                                                        seed=seed,
+                                                        use_gpu=use_gpu,
+                                                        verbose=verbose)
+    else:
+        best_params = {k: vs[0] for k, vs in params_map.items()}
 
-    sorted_df = (
-        results_df.loc[results_df['train/tune'] == 'tune']
-                  .groupby('param_set')
-                  .mean()
-                  .reset_index()
-                  .sort_values(by='loss')
-    )
-    best_ix = sorted_df.loc[0, 'param_set']
-    best_params = {k: v[best_ix] for k, v in params_map.items()}
-    return results_df, best_params
+    losses, preds, preds_bn = torch_model(X_train, X_test, y_train, y_test,
+                                          best_params, use_gpu=use_gpu,
+                                          verbose=verbose)
 
-
-def torch_tuning(X_subtrain, X_tune, y_subtrain, y_tune, params_map,
-                 use_gpu=False, verbose=False):
-    """Run parameter search on a single subtrain/tune split."""
-    result = {
-        'param_set': [],
-        'train/tune': [],
-        'loss': []
-    }
-    num_iters = len(params_map[list(params_map.keys())[0]])
-    for ix in range(num_iters):
-        if verbose:
-            print('-- Running parameter set {} of {}...'.format(ix+1, num_iters),
-                  end='')
-        params = {k: v[ix] for k, v in params_map.items()}
-        losses, _, __ = torch_model(X_subtrain, X_tune,
-                                    y_subtrain, y_tune,
-                                    params, use_gpu,
-                                    verbose)
-        subtrain_loss, tune_loss = losses
-        if verbose:
-            print('train_loss: {:.4f}, tune_loss: {:.4f}'.format(subtrain_loss, tune_loss))
-        result['param_set'].append(ix)
-        result['train/tune'].append('train')
-        result['loss'].append(subtrain_loss)
-        result['param_set'].append(ix)
-        result['train/tune'].append('tune')
-        result['loss'].append(tune_loss)
-    return pd.DataFrame(result)
+    return losses, preds, preds_bn
 
 
 def torch_model(X_train, X_test,
                 y_train, y_test,
                 params, use_gpu=False,
                 verbose=False):
+
+    """Main function for training PyTorch model.
+
+    Parameters
+    ----------
+    X_train : array_like, [n_samples, n_features]
+        Training data
+
+    X_test : array_like, [n_samples, n_features]
+        Data to evaluate model on
+
+    y_train : array_like, [n_samples]
+        Training labels
+
+    y_test : array_like, [n_samples]
+        Labels to evaluate model on
+
+    params : dict, (str: mixed)
+        Maps hyperparameter names to a single value, used to train the model
+
+    use_gpu : bool
+        Whether or not to use the GPU for training
+
+    verbose : bool
+        Whether or not to print verbose output
+
+    Returns
+    -------
+    tuple : ((list, list), (list, list), (list, list))
+        ((loss on training data, loss on test data),
+         (predictions on training data, predictions on testing data),
+         (binarized predictions on training/test data))
+    """
+
 
     if verbose:
         t = time.time()
@@ -182,35 +201,76 @@ def torch_model(X_train, X_test,
             (y_pred_train, y_pred_test),
             (y_pred_bn_train, y_pred_bn_test))
 
+def torch_param_selection(X_train,
+                          y_train,
+                          params_map,
+                          num_folds,
+                          seed=1,
+                          use_gpu=False,
+                          verbose=False):
+    """Select best parameters from a set of possibilities.
 
-def train_torch_model(X_train, X_test,
-                      y_train, y_test,
-                      params_map,
-                      num_inner_folds=4,
-                      seed=1,
-                      use_gpu=False,
-                      verbose=False):
+    Dataset terminology: (subtrain | tune) = train | test
+    (avoiding the term "validation" since it's overloaded in biology)
+    """
+    # k-fold cross-validation over the training data
+    kf = KFold(n_splits=num_folds, shuffle=True, random_state=seed)
+    results_df = None
+    for fold, (subtrain_ixs, tune_ixs) in enumerate(kf.split(X_train), 1):
+        X_subtrain, X_tune = X_train[subtrain_ixs], X_train[tune_ixs]
+        y_subtrain, y_tune = y_train[subtrain_ixs], y_train[tune_ixs]
+        if verbose:
+            print('Running CV fold {} of {}'.format(fold, num_folds))
+        result_df = torch_tuning(X_subtrain, X_tune,
+                                 y_subtrain, y_tune,
+                                 params_map, use_gpu,
+                                 verbose)
+        result_df['fold'] = fold
+        if results_df is None:
+            results_df = result_df
+        else:
+            results_df = pd.concat((results_df, result_df), ignore_index=True)
 
-    min_params_length = min(len(vs) for k, vs in params_map.items())
-    if min_params_length > 1:
-        # if multiple hyperparameter choices are provided, get the best
-        # set of hyperparameters from a random search
-        results_df, best_params = torch_param_selection(X_train, y_train,
-                                                        params_map,
-                                                        num_inner_folds,
-                                                        seed=seed,
-                                                        use_gpu=use_gpu,
-                                                        verbose=verbose)
-    else:
-        # else just use the hyperparameters provided (since there's only
-        # one choice)
-        best_params = {k: vs[0] for k, vs in params_map.items()}
+    sorted_df = (
+        results_df.loc[results_df['train/tune'] == 'tune']
+                  .groupby('param_set')
+                  .mean()
+                  .reset_index()
+                  .sort_values(by='loss')
+    )
+    best_ix = sorted_df.loc[0, 'param_set']
+    best_params = {k: v[best_ix] for k, v in params_map.items()}
+    return results_df, best_params
 
-    losses, preds, preds_bn = torch_model(X_train, X_test, y_train, y_test,
-                                          best_params, use_gpu=use_gpu,
-                                          verbose=verbose)
 
-    return losses, preds, preds_bn
+def torch_tuning(X_subtrain, X_tune, y_subtrain, y_tune, params_map,
+                 use_gpu=False, verbose=False):
+    """Run parameter search on a single subtrain/tune split."""
+    result = {
+        'param_set': [],
+        'train/tune': [],
+        'loss': []
+    }
+    num_iters = len(params_map[list(params_map.keys())[0]])
+    for ix in range(num_iters):
+        if verbose:
+            print('-- Running parameter set {} of {}...'.format(ix+1, num_iters),
+                  end='')
+        params = {k: v[ix] for k, v in params_map.items()}
+        losses, _, __ = torch_model(X_subtrain, X_tune,
+                                    y_subtrain, y_tune,
+                                    params, use_gpu,
+                                    verbose)
+        subtrain_loss, tune_loss = losses
+        if verbose:
+            print('train_loss: {:.4f}, tune_loss: {:.4f}'.format(subtrain_loss, tune_loss))
+        result['param_set'].append(ix)
+        result['train/tune'].append('train')
+        result['loss'].append(subtrain_loss)
+        result['param_set'].append(ix)
+        result['train/tune'].append('tune')
+        result['loss'].append(tune_loss)
+    return pd.DataFrame(result)
 
 
 if __name__ == '__main__':
