@@ -9,7 +9,6 @@ import torch
 import torch.nn as nn
 import torch.utils.data as data_utils
 
-from classify_sklearn import train_sklearn_model
 
 class LogisticRegression(nn.Module):
     """Model for PyTorch logistic regression."""
@@ -106,6 +105,7 @@ class TorchLR:
             results_df, best_params = self.torch_param_selection(X_train, y_train)
         else:
             best_params = {k: vs[0] for k, vs in self.params_map.items()}
+        self.best_params = best_params
 
         losses, preds, preds_bn = self.torch_model(X_train, X_test, y_train, y_test,
                                                    best_params)
@@ -150,8 +150,8 @@ class TorchLR:
         l1_penalty = params['l1_penalty']
 
         if self.use_gpu:
-            X_tr = torch.stack([torch.Tensor(x).cuda() for x in X_train])
-            X_ts = torch.stack([torch.Tensor(x).cuda() for x in X_test])
+            X_tr = torch.stack([torch.Tensor(x) for x in X_train]).cuda()
+            X_ts = torch.stack([torch.Tensor(x) for x in X_test]).cuda()
             y_tr = torch.Tensor(y_train).view(-1, 1).cuda()
             y_ts = torch.Tensor(y_test).view(-1, 1).cuda()
         else:
@@ -202,8 +202,12 @@ class TorchLR:
         if self.verbose:
             print('(time: {:.3f} sec)'.format(time.time() - t))
 
-        y_pred_train = y_pred_train.detach().numpy()
-        y_pred_test = y_pred_test.detach().numpy()
+        if self.use_gpu:
+            y_pred_train = y_pred_train.cpu().detach().numpy()
+            y_pred_test = y_pred_test.cpu().detach().numpy()
+        else:
+            y_pred_train = y_pred_train.detach().numpy()
+            y_pred_test = y_pred_test.detach().numpy()
 
         y_pred_bn_train = (y_pred_train > 0).astype('int')
         y_pred_bn_test = (y_pred_test > 0).astype('int')
@@ -292,12 +296,13 @@ if __name__ == '__main__':
 
     import argparse
 
+    from sklearn.datasets import load_breast_cancer
+    from sklearn.model_selection import train_test_split
+
     import sys; sys.path.append('.')
     import config as cfg
     from tcga_util import get_threshold_metrics
-
-    from sklearn.datasets import load_breast_cancer
-    from sklearn.model_selection import train_test_split
+    from classify_sklearn import train_sklearn_model
 
     p = argparse.ArgumentParser()
     p.add_argument('--gpu', action='store_true')
