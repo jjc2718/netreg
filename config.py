@@ -28,5 +28,5 @@ torch_param_choices = {
     'num_epochs': [100, 200, 500, 1000],
     'l1_penalty': [0, 0.01, 0.1, 1, 10]
 }
-torch_num_iters = 10
-torch_num_inner_folds = 4
+torch_num_iters = 2
+torch_num_inner_folds = 2

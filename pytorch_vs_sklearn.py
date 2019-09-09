@@ -263,6 +263,9 @@ for gene_idx, gene_series in genes_df.iterrows():
 
         kf = KFold(n_splits=cfg.folds, shuffle=True, random_state=args.seed)
 
+        sklearn_coef_df = None
+        torch_coef_df = None
+
         for fold, (subtrain_ixs, tune_ixs) in enumerate(kf.split(x_train_df.values), 1):
 
             logging.debug('Evaluating models on fold {} of {}'.format(
@@ -274,20 +277,49 @@ for gene_idx, gene_series in genes_df.iterrows():
             y_tune = y_train_df.status.values[tune_ixs]
 
             # Make predictions using torch model
+            # To save: 
+            # - metrics (accuracy, AUROC, AUPR) for each fold
+            # - model coefficients (linear layer weights) for each fold
+            # - best parameters from search procedure
+
             # TODO: how to get coefficients/weights from torch model
             _, torch_preds, torch_preds_bn = torch_model.torch_model(
-                X_subtrain, X_tune, y_subtrain, y_tune, best_torch_params)
+                X_subtrain, X_tune, y_subtrain, y_tune, best_torch_params,
+                save_weights=True)
 
+            torch_weights = torch_model.last_weights.flatten()
             torch_pred_train, torch_pred_tune = torch_preds
             torch_pred_bn_train, torch_pred_bn_tune = torch_preds_bn
 
             # Make predictions using sklearn model
-            # TODO: do I have to also retrain this model?
             cv_pipeline.fit(X=X_subtrain, y=y_subtrain)
             sklearn_pred_train = cv_pipeline.decision_function(X_subtrain)
             sklearn_pred_tune = cv_pipeline.decision_function(X_tune)
             sklearn_pred_bn_train = cv_pipeline.predict(X_subtrain)
             sklearn_pred_bn_tune = cv_pipeline.predict(X_tune)
+
+            s_coef_df = extract_coefficients(
+                cv_pipeline=cv_pipeline,
+                feature_names=x_train_df.columns,
+                signal=signal,
+                z_dim=len(x_train_df.columns),
+                seed=args.seed,
+                algorithm=algorithm
+            )
+            s_coef_df['fold'] = fold
+
+            t_coef_df = s_coef_df.copy()
+            t_coef_df['weight'] = torch_weights
+
+            if sklearn_coef_df is None:
+                sklearn_coef_df = s_coef_df
+            else:
+                sklearn_coef_df = pd.concat((sklearn_coef_df, s_coef_df))
+
+            if torch_coef_df is None:
+                torch_coef_df = t_coef_df
+            else:
+                torch_coef_df = pd.concat((torch_coef_df, t_coef_df))
 
             torch_train_results = get_threshold_metrics(
                 y_subtrain, torch_pred_train, drop=False
@@ -317,93 +349,23 @@ for gene_idx, gene_series in genes_df.iterrows():
                 return sum(1 for i in range(len(y)) if y[i] == y_pred[i]) / len(y)
 
             cv_results['torch_train_acc'].append(
-                    calculate_accuracy(y_subtrain, torch_pred_train))
+                    calculate_accuracy(y_subtrain, torch_pred_bn_train))
             cv_results['torch_tune_acc'].append(
-                    calculate_accuracy(y_tune, torch_pred_tune))
+                    calculate_accuracy(y_tune, torch_pred_bn_tune))
             cv_results['sklearn_train_acc'].append(
-                    calculate_accuracy(y_subtrain, sklearn_pred_train))
+                    calculate_accuracy(y_subtrain, sklearn_pred_bn_train))
             cv_results['sklearn_tune_acc'].append(
-                    calculate_accuracy(y_tune, sklearn_pred_tune))
+                    calculate_accuracy(y_tune, sklearn_pred_bn_tune))
 
-        print(cv_results)
-        with open('./cv_results.pkl', 'wb') as f:
+        with open('./pytorch_results/cv_results_{}_{}.pkl'.format(signal, args.seed),
+                  'wb') as f:
             pkl.dump(cv_results, f)
-        exit()
 
-        """
-        # Get metric predictions
-        y_train_results = get_threshold_metrics(
-            y_train_df.status, y_pred_train_df, drop=False
-        )
-        y_test_results = get_threshold_metrics(
-            y_test_df.status, y_pred_test_df, drop=False
-        )
-        y_cv_results = get_threshold_metrics(y_train_df.status, y_cv_df, drop=False)
+        torch_coef_df.to_csv('./pytorch_results/torch_coefs_{}_{}.tsv.gz'.format(signal, args.seed),
+                             sep='\t', index=False, compression='gzip',
+                             float_format="%.5g")
 
-        # Get coefficients
-        coef_df = extract_coefficients(
-            cv_pipeline=cv_pipeline,
-            feature_names=x_train_df.columns,
-            signal=signal,
-            z_dim=cfg.num_features_raw,
-            seed=args.seed,
-            algorithm=algorithm,
-        )
+        sklearn_coef_df.to_csv('./pytorch_results/sklearn_coefs_{}_{}.tsv.gz'.format(signal, args.seed),
+                             sep='\t', index=False, compression='gzip',
+                             float_format="%.5g")
 
-        coef_df = coef_df.assign(gene=gene_name)
-
-        # Store all results
-        train_metrics_, train_roc_df, train_pr_df = summarize_results(
-            y_train_results, gene_name, signal, cfg.num_features_raw,
-            args.seed, algorithm, "train"
-        )
-        test_metrics_, test_roc_df, test_pr_df = summarize_results(
-            y_test_results, gene_name, signal, cfg.num_features_raw,
-            args.seed, algorithm, "test"
-        )
-        cv_metrics_, cv_roc_df, cv_pr_df = summarize_results(
-            y_cv_results, gene_name, signal, cfg.num_features_raw,
-            args.seed, algorithm, "cv"
-        )
-
-        # Compile summary metrics
-        metrics_ = [train_metrics_, test_metrics_, cv_metrics_]
-        metric_df_ = pd.DataFrame(metrics_, columns=metric_cols)
-        gene_metrics_list.append(metric_df_)
-
-        gene_auc_df = pd.concat([train_roc_df, test_roc_df, cv_roc_df])
-        gene_auc_list.append(gene_auc_df)
-
-        gene_aupr_df = pd.concat([train_pr_df, test_pr_df, cv_pr_df])
-        gene_aupr_list.append(gene_aupr_df)
-
-        gene_coef_list.append(coef_df)
-
-    gene_auc_df = pd.concat(gene_auc_list)
-    gene_aupr_df = pd.concat(gene_aupr_list)
-    gene_coef_df = pd.concat(gene_coef_list)
-    gene_metrics_df = pd.concat(gene_metrics_list)
-
-    file = os.path.join(
-        gene_dir, "{}_raw_auc_threshold_metrics.tsv.gz".format(gene_name)
-    )
-    gene_auc_df.to_csv(
-        file, sep="\t", index=False, compression="gzip", float_format="%.5g"
-    )
-
-    file = os.path.join(
-        gene_dir, "{}_raw_aupr_threshold_metrics.tsv.gz".format(gene_name)
-    )
-    gene_aupr_df.to_csv(
-        file, sep="\t", index=False, compression="gzip", float_format="%.5g"
-    )
-
-    gene_coef_df.to_csv(
-        check_file, sep="\t", index=False, compression="gzip", float_format="%.5g"
-    )
-
-    file = os.path.join(gene_dir, "{}_raw_classify_metrics.tsv.gz".format(gene_name))
-    gene_metrics_df.to_csv(
-        file, sep="\t", index=False, compression="gzip", float_format="%.5g"
-    )
-    """

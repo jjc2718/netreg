@@ -105,6 +105,8 @@ class TorchLR:
             results_df, best_params = self.torch_param_selection(X_train, y_train)
         else:
             best_params = {k: vs[0] for k, vs in self.params_map.items()}
+
+        self.results_df = results_df
         self.best_params = best_params
 
         losses, preds, preds_bn = self.torch_model(X_train, X_test, y_train, y_test,
@@ -113,7 +115,8 @@ class TorchLR:
         return losses, preds, preds_bn
 
 
-    def torch_model(self, X_train, X_test, y_train, y_test, params):
+    def torch_model(self, X_train, X_test, y_train, y_test, params,
+                    save_weights=False):
 
         """Main function for training PyTorch model.
 
@@ -133,6 +136,9 @@ class TorchLR:
 
         params : dict, (str: mixed)
             Maps hyperparameter names to a single value, used to train the model
+
+        save_weights: bool
+            Whether or not to save weights (coefficients) from trained model
 
         Returns
         -------
@@ -186,6 +192,12 @@ class TorchLR:
                 optimizer.step()
             scheduler.step(running_loss)
 
+        if save_weights:
+            if self.use_gpu:
+                self.last_weights = model.linear.weight.data.cpu().numpy()
+            else:
+                self.last_weights = model.linear.weight.data.numpy()
+
         y_pred_train = model(X_tr)
         y_pred_test = model(X_ts)
 
@@ -208,6 +220,7 @@ class TorchLR:
         else:
             y_pred_train = y_pred_train.detach().numpy()
             y_pred_test = y_pred_test.detach().numpy()
+
 
         y_pred_bn_train = (y_pred_train > 0).astype('int')
         y_pred_bn_test = (y_pred_test > 0).astype('int')
@@ -240,6 +253,8 @@ class TorchLR:
             else:
                 results_df = pd.concat((results_df, result_df), ignore_index=True)
 
+        results_df.to_csv('./results_df.tsv', sep='\t')
+
         # get the index of the parameter set that performed the best on
         # average across folds
         sorted_df = (
@@ -265,6 +280,8 @@ class TorchLR:
             'train/tune': [],
             'loss': []
         }
+        for param in self.params_map.keys():
+            result[param] = []
         num_iters = len(self.params_map[list(self.params_map.keys())[0]])
         for ix in range(num_iters):
             if self.verbose:
@@ -283,9 +300,13 @@ class TorchLR:
             result['param_set'].append(ix)
             result['train/tune'].append('train')
             result['loss'].append(subtrain_loss)
+            for param in self.params_map.keys():
+                result[param].append(self.params_map[param][ix])
             result['param_set'].append(ix)
             result['train/tune'].append('tune')
             result['loss'].append(tune_loss)
+            for param in self.params_map.keys():
+                result[param].append(self.params_map[param][ix])
         return pd.DataFrame(result)
 
 
