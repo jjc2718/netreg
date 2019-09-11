@@ -5,6 +5,7 @@ from sklearn.model_selection import (
     KFold,
     cross_val_predict
 )
+from sklearn.metrics import roc_auc_score
 import torch
 import torch.nn as nn
 import torch.utils.data as data_utils
@@ -38,13 +39,13 @@ class TorchLR:
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
 
-        min_params_length = min(len(vs) for k, vs in params_map.items())
+        max_params_length = max(len(vs) for k, vs in params_map.items())
         # if there's only one choice provided for each hyperparameter,
         # we'll skip the parameter search later
         #
         # if there are multiple choices, select num_iters parameter
         # combinations to be tested during the parameter search
-        if min_params_length > 1:
+        if max_params_length > 1:
             params_map = self.get_params_map(params_map,
                                              num_iters=num_iters)
         self.params_map = params_map
@@ -100,13 +101,13 @@ class TorchLR:
         set of hyperparameters from a random search. Otherwise, just use
         the hyperparameters provided to train/evaluate the model.
         """
-        min_params_length = min(len(vs) for k, vs in self.params_map.items())
-        if min_params_length > 1:
+        max_params_length = max(len(vs) for k, vs in self.params_map.items())
+        if max_params_length > 1:
             results_df, best_params = self.torch_param_selection(X_train, y_train)
+            self.results_df = results_df
         else:
             best_params = {k: vs[0] for k, vs in self.params_map.items()}
 
-        self.results_df = results_df
         self.best_params = best_params
 
         losses, preds, preds_bn = self.torch_model(X_train, X_test, y_train, y_test,
@@ -155,16 +156,24 @@ class TorchLR:
         num_epochs = params['num_epochs']
         l1_penalty = params['l1_penalty']
 
+        # weight loss function based on training data (??)
+        train_count = np.bincount(y_train)
+        pos_weight = train_count[0] / train_count[1]
+        if self.verbose:
+            print('\n[0, 1]: {} (pos_weight={:.4f})'.format(train_count, pos_weight))
+
         if self.use_gpu:
             X_tr = torch.stack([torch.Tensor(x) for x in X_train]).cuda()
             X_ts = torch.stack([torch.Tensor(x) for x in X_test]).cuda()
             y_tr = torch.Tensor(y_train).view(-1, 1).cuda()
             y_ts = torch.Tensor(y_test).view(-1, 1).cuda()
+            pos_weight = torch.Tensor([pos_weight]).cuda()
         else:
             X_tr = torch.stack([torch.Tensor(x) for x in X_train])
             X_ts = torch.stack([torch.Tensor(x) for x in X_test])
             y_tr = torch.Tensor(y_train).view(-1, 1)
             y_ts = torch.Tensor(y_test).view(-1, 1)
+            pos_weight = torch.Tensor([pos_weight])
 
         train_loader = data_utils.DataLoader(
                 data_utils.TensorDataset(X_tr, y_tr),
@@ -174,7 +183,8 @@ class TorchLR:
         if self.use_gpu:
             model = model.cuda()
 
-        criterion = nn.BCEWithLogitsLoss()
+        # pos_weight is a scalar, the weight for the 1 class
+        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
                         optimizer, patience=5)
@@ -253,16 +263,14 @@ class TorchLR:
             else:
                 results_df = pd.concat((results_df, result_df), ignore_index=True)
 
-        results_df.to_csv('./results_df.tsv', sep='\t')
-
         # get the index of the parameter set that performed the best on
         # average across folds
         sorted_df = (
             results_df.loc[results_df['train/tune'] == 'tune']
                       .groupby('param_set')
                       .mean()
-                      .reset_index()
                       .sort_values(by='loss')
+                      .reset_index()
         )
         best_ix = sorted_df.loc[0, 'param_set']
         best_params = {k: v[best_ix] for k, v in self.params_map.items()}
@@ -278,7 +286,8 @@ class TorchLR:
         result = {
             'param_set': [],
             'train/tune': [],
-            'loss': []
+            'loss': [],
+            'auroc': []
         }
         for param in self.params_map.keys():
             result[param] = []
@@ -288,23 +297,29 @@ class TorchLR:
                 print('-- Running parameter set {} of {}...'.format(ix+1, num_iters),
                       end='')
             params = {k: v[ix] for k, v in self.params_map.items()}
-            losses, _, __ = self.torch_model(X_subtrain,
-                                             X_tune,
-                                             y_subtrain,
-                                             y_tune,
-                                             params)
+            print(params)
+            losses, y_preds, __ = self.torch_model(X_subtrain,
+                                                   X_tune,
+                                                   y_subtrain,
+                                                   y_tune,
+                                                   params)
+            y_pred_subtrain, y_pred_tune = y_preds
             subtrain_loss, tune_loss = losses
+            subtrain_auroc = roc_auc_score(y_subtrain, y_pred_subtrain, average="weighted")
+            tune_auroc = roc_auc_score(y_tune, y_pred_tune, average="weighted")
             if self.verbose:
                 print('subtrain_loss: {:.4f}, tune_loss: {:.4f}'.format(
                         subtrain_loss, tune_loss))
             result['param_set'].append(ix)
             result['train/tune'].append('train')
             result['loss'].append(subtrain_loss)
+            result['auroc'].append(subtrain_auroc)
             for param in self.params_map.keys():
                 result[param].append(self.params_map[param][ix])
             result['param_set'].append(ix)
             result['train/tune'].append('tune')
             result['loss'].append(tune_loss)
+            result['auroc'].append(tune_auroc)
             for param in self.params_map.keys():
                 result[param].append(self.params_map[param][ix])
         return pd.DataFrame(result)

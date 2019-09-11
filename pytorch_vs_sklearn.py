@@ -232,6 +232,10 @@ for gene_idx, gene_series in genes_df.iterrows():
                                                                 y_test_df.status.values)
         best_torch_params = torch_model.best_params
 
+        if hasattr(torch_model, 'results_df'):
+            torch_model.results_df.to_csv('./pytorch_results/torch_params_{}_{}.tsv'.format(
+                signal, args.seed), sep='\t')
+
         # Find the best scikit-learn model
         cv_pipeline, y_pred_train_df, y_pred_test_df, y_cv_df = train_model(
             x_train=x_train_df,
@@ -277,7 +281,7 @@ for gene_idx, gene_series in genes_df.iterrows():
             y_tune = y_train_df.status.values[tune_ixs]
 
             # Make predictions using torch model
-            # To save: 
+            # To save:
             # - metrics (accuracy, AUROC, AUPR) for each fold
             # - model coefficients (linear layer weights) for each fold
             # - best parameters from search procedure
