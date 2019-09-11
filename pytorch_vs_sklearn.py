@@ -3,6 +3,9 @@ Script to compare PyTorch implementation of logistic regression against
 previous scikit-learn implementation, to validate that the former is
 correct and gives more or less the same results.
 
+Based on 3.classify-with-raw-expression.py (data sources are the same
+but output formats are slightly different).
+
 """
 import os
 import argparse
@@ -20,12 +23,9 @@ from tcga_util import (
     load_top_50,
     subset_genes_by_mad,
     get_threshold_metrics,
-    summarize_results,
     extract_coefficients,
     align_matrices,
     process_y_matrix,
-    train_model,
-    process_y_matrix_cancertype,
     check_status
 )
 
@@ -54,7 +54,6 @@ genes_df = load_top_50()
 if args.gene_list is not None:
     genes_df = genes_df[genes_df['gene'].isin(args.gene_list)]
     genes_df.reset_index(drop=True, inplace=True)
-
 
 # loading this data from the pancancer repo is very slow, so we
 # cache it in a pickle to speed up loading
@@ -90,7 +89,6 @@ rnaseq_test = (
 rnaseq_train_df = pd.read_csv(rnaseq_train, index_col=0, sep='\t')
 rnaseq_test_df = pd.read_csv(rnaseq_test, index_col=0, sep='\t')
 
-# TODO: is option for subset by mad genes necessary?
 mad_file = os.path.join(cfg.data_dir, 'tcga_mad_genes.tsv')
 rnaseq_train_df, rnaseq_test_df = subset_genes_by_mad(
     rnaseq_train_df, rnaseq_test_df, mad_file, cfg.num_features_raw)
@@ -135,16 +133,6 @@ for gene_idx, gene_series in genes_df.iterrows():
     gene_aupr_list = []
     gene_coef_list = []
     gene_metrics_list = []
-
-    # Create directory for the gene
-    gene_dir = os.path.join(args.results_dir, "mutation", gene_name)
-    os.makedirs(gene_dir, exist_ok=True)
-
-    # Check if gene has been processed already
-    check_file = os.path.join(gene_dir,
-                              "{}_raw_coefficients.tsv.gz".format(gene_name))
-    if check_status(check_file):
-        continue
 
     # Process the y matrix for the given gene or pathway
     y_mutation_df = mutation_df.loc[:, gene_name]
@@ -285,8 +273,6 @@ for gene_idx, gene_series in genes_df.iterrows():
             # - metrics (accuracy, AUROC, AUPR) for each fold
             # - model coefficients (linear layer weights) for each fold
             # - best parameters from search procedure
-
-            # TODO: how to get coefficients/weights from torch model
             _, torch_preds, torch_preds_bn = torch_model.torch_model(
                 X_subtrain, X_tune, y_subtrain, y_tune, best_torch_params,
                 save_weights=True)
@@ -361,15 +347,17 @@ for gene_idx, gene_series in genes_df.iterrows():
             cv_results['sklearn_tune_acc'].append(
                     calculate_accuracy(y_tune, sklearn_pred_bn_tune))
 
-        with open('./pytorch_results/cv_results_{}_{}.pkl'.format(signal, args.seed),
+        with open(os.path.join(args.results_dir, 'cv_results_{}_{}.pkl'.format(signal, args.seed)),
                   'wb') as f:
             pkl.dump(cv_results, f)
 
-        torch_coef_df.to_csv('./pytorch_results/torch_coefs_{}_{}.tsv.gz'.format(signal, args.seed),
+        torch_coef_df.to_csv(os.path.join(args.results_dir,
+                                          './pytorch_results/torch_coefs_{}_{}.tsv.gz'.format(signal, args.seed),
                              sep='\t', index=False, compression='gzip',
                              float_format="%.5g")
 
-        sklearn_coef_df.to_csv('./pytorch_results/sklearn_coefs_{}_{}.tsv.gz'.format(signal, args.seed),
+        sklearn_coef_df.to_csv(os.path.join(args.results_dir,
+                                            './pytorch_results/sklearn_coefs_{}_{}.tsv.gz'.format(signal, args.seed),
                              sep='\t', index=False, compression='gzip',
                              float_format="%.5g")
 

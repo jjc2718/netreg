@@ -156,7 +156,11 @@ class TorchLR:
         num_epochs = params['num_epochs']
         l1_penalty = params['l1_penalty']
 
-        # weight loss function based on training data (??)
+        # Weight loss function based on training data label imbalance
+        # see, e.g. https://discuss.pytorch.org/t/about-bcewithlogitslosss-pos-weights/22567/2
+        #
+        # TODO: could add a function argument to turn this on/off (but in
+        # general it seems to give slightly better results)
         train_count = np.bincount(y_train)
         pos_weight = train_count[0] / train_count[1]
         if self.verbose:
@@ -326,9 +330,9 @@ class TorchLR:
 
 
 if __name__ == '__main__':
-    # TODO: make sure refactor works, etc on small datasets
-    # then try it on mutation detection data (train/eval on train set, don't
-    # touch test set until sure new code works)
+    # code to test the implementation quickly against sklearn
+    # using breast cancer dataset from sklearn.datasets
+    # original: https://archive.ics.uci.edu/ml/datasets/Breast+Cancer+Wisconsin+(Diagnostic)
 
     import argparse
 
@@ -346,7 +350,6 @@ if __name__ == '__main__':
     p.add_argument('--verbose', action='store_true')
     args = p.parse_args()
 
-
     # hyperparameter choices to do a random search over
     sklearn_param_choices = {
         'alpha': [0.1, 0.13, 0.15, 0.2, 0.25, 0.3],
@@ -359,25 +362,6 @@ if __name__ == '__main__':
         'num_epochs': [100, 200, 500, 1000],
         'l1_penalty': [0, 0.01, 0.1, 1, 10]
     }
-
-
-    '''
-    # get num_iters different combinations of hyperparameters to test
-    sklearn_params_map = get_params_map(sklearn_param_choices,
-                                        num_iters=num_iters,
-                                        seed=args.seed)
-
-    sklearn_params_map = {
-        'alpha': [0.1],
-        'l1_ratio': [0.15]
-    }
-    torch_params_map = {
-        'learning_rate': [0.0001],
-        'batch_size': [10],
-        'num_epochs': [200],
-        'l1_penalty': [0]
-    }
-    '''
 
     num_iters = 8
     num_inner_folds = 3

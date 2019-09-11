@@ -1,3 +1,7 @@
+"""
+Quick script to benchmark scikit-learn logistic regression pipeline
+
+"""
 from sklearn.pipeline import Pipeline
 from sklearn.linear_model import SGDClassifier
 from sklearn.model_selection import (
@@ -8,8 +12,6 @@ from sklearn.model_selection import (
 
 def train_sklearn_model(X_train, X_test, y_train, alphas, l1_ratios,
                         seed=0, n_folds=5, max_iter=1000):
-
-    # from dask_ml.model_selection import GridSearchCV
 
     # Setup the classifier parameters
     clf_parameters = {
