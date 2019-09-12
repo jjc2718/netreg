@@ -7,6 +7,7 @@ https://github.com/greenelab/BioBombe/blob/master/9.tcga-classify/classify-with-
 import os
 import argparse
 import logging
+import pickle as pkl
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
@@ -23,7 +24,7 @@ from tcga_util import (
     process_y_matrix,
     train_model,
     process_y_matrix_cancertype,
-    check_status,
+    check_status
 )
 
 p = argparse.ArgumentParser()
@@ -49,14 +50,25 @@ if args.gene_list is not None:
     genes_df = genes_df[genes_df['gene'].isin(args.gene_list)]
     genes_df.reset_index(drop=True, inplace=True)
 
-logging.debug('Loading pan-cancer data...')
-# TODO: this data can probably be cached somewhere to speed things up,
-#       loading this data is currently v. slow
+# loading this data from the pancancer repo is very slow, so we
+# cache it in a pickle to speed up loading
+pancan_fname = os.path.join(cfg.data_dir, 'pancancer_data.pkl')
+
+if os.path.exists(pancan_fname):
+    logging.debug('Loading pan-cancer data from cached pickle file...')
+    with open(pancan_fname, 'rb') as f:
+        pancan_data = pkl.load(f)
+else:
+    logging.debug('Loading pan-cancer data from repo (warning: slow)...')
+    pancan_data = load_pancancer_data()
+    with open(pancan_fname, 'wb') as f:
+        pkl.dump(pancan_data, f)
+
 (sample_freeze_df,
  mutation_df,
  copy_loss_df,
  copy_gain_df,
- mut_burden_df) = load_pancancer_data()
+ mut_burden_df) = pancan_data
 
 # Load and process X matrix
 logging.debug('Loading gene expression data...')
@@ -222,7 +234,9 @@ for gene_idx, gene_series in genes_df.iterrows():
         y_test_results = get_threshold_metrics(
             y_test_df.status, y_pred_test_df, drop=False
         )
-        y_cv_results = get_threshold_metrics(y_train_df.status, y_cv_df, drop=False)
+        y_cv_results = get_threshold_metrics(
+            y_train_df.status, y_cv_df, drop=False
+        )
 
         # Get coefficients
         coef_df = extract_coefficients(
