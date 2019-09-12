@@ -134,6 +134,10 @@ for gene_idx, gene_series in genes_df.iterrows():
     gene_coef_list = []
     gene_metrics_list = []
 
+    # Create directory for the gene
+    gene_dir = os.path.join(args.results_dir, "mutation", gene_name)
+    os.makedirs(gene_dir, exist_ok=True)
+
     # Process the y matrix for the given gene or pathway
     y_mutation_df = mutation_df.loc[:, gene_name]
 
@@ -336,7 +340,7 @@ for gene_idx, gene_series in genes_df.iterrows():
             cv_results['sklearn_tune_aupr'].append(sklearn_tune_results['aupr'])
 
             def calculate_accuracy(y, y_pred):
-                return np.linalg.norm(1 for i in range(len(y)) if y[i] == y_pred[i], ord=0) / len(y)
+                return np.linalg.norm((1 for i in range(len(y)) if y[i] == y_pred[i]), ord=0) / len(y)
 
             cv_results['torch_train_acc'].append(
                     calculate_accuracy(y_subtrain, torch_pred_bn_train))
@@ -352,12 +356,12 @@ for gene_idx, gene_series in genes_df.iterrows():
             pkl.dump(cv_results, f)
 
         torch_coef_df.to_csv(os.path.join(args.results_dir,
-                                          './pytorch_results/torch_coefs_{}_{}.tsv.gz'.format(signal, args.seed),
+                                          './pytorch_results/torch_coefs_{}_{}.tsv.gz'.format(signal, args.seed)),
                              sep='\t', index=False, compression='gzip',
                              float_format="%.5g")
 
         sklearn_coef_df.to_csv(os.path.join(args.results_dir,
-                                            './pytorch_results/sklearn_coefs_{}_{}.tsv.gz'.format(signal, args.seed),
+                                            './pytorch_results/sklearn_coefs_{}_{}.tsv.gz'.format(signal, args.seed)),
                              sep='\t', index=False, compression='gzip',
                              float_format="%.5g")
 
