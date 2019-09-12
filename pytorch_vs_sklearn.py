@@ -336,7 +336,7 @@ for gene_idx, gene_series in genes_df.iterrows():
             cv_results['sklearn_tune_aupr'].append(sklearn_tune_results['aupr'])
 
             def calculate_accuracy(y, y_pred):
-                return sum(1 for i in range(len(y)) if y[i] == y_pred[i]) / len(y)
+                return np.linalg.norm(1 for i in range(len(y)) if y[i] == y_pred[i], ord=0) / len(y)
 
             cv_results['torch_train_acc'].append(
                     calculate_accuracy(y_subtrain, torch_pred_bn_train))
