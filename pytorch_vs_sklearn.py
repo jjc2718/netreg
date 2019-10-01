@@ -253,7 +253,7 @@ for gene_idx, gene_series in genes_df.iterrows():
         if hasattr(torch_model, 'results_df'):
             torch_model.results_df.to_csv(os.path.join(args.results_dir,
                                                        'torch_params_{}_{}.tsv'.format(
-                                                           signal, args.seed), sep='\t'))
+                                                           signal, args.seed)), sep='\t')
         else:
             results_df = pd.DataFrame({
                 'batch_size': [args.batch_size],
