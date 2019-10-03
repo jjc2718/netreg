@@ -57,6 +57,14 @@ prms.add_argument('--param_search', action='store_true',
 
 args = p.parse_args()
 
+if (not args.param_search) and (None in [args.batch_size,
+                                         args.learning_rate,
+                                         args.num_epochs,
+                                         args.l1_penalty]):
+    import sys
+    sys.exit('Error: must either include the "--param_search" flag'
+             ' or manually pass a single value for all parameters')
+
 if args.verbose:
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
@@ -228,7 +236,6 @@ for gene_idx, gene_series in genes_df.iterrows():
         if args.param_search:
             torch_params = cfg.torch_param_choices
         else:
-            # TODO: make sure either ^ is included or all of these are specified
             torch_params = {
                 'batch_size': [args.batch_size],
                 'l1_penalty': [args.l1_penalty],
