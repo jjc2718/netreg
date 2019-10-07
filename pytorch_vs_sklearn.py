@@ -19,6 +19,7 @@ from sklearn.preprocessing import MinMaxScaler
 import config as cfg
 from utilities.classify_pytorch import TorchLR
 from tcga_util import (
+    train_model,
     load_pancancer_data,
     load_top_50,
     subset_genes_by_mad,
@@ -40,7 +41,29 @@ p.add_argument('--results_dir',
                help='where to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
 p.add_argument('--verbose', action='store_true')
+
+prms = p.add_argument_group('pytorch_params')
+prms.add_argument('--batch_size', type=int, default=None,
+                  help='Batch size for PyTorch logistic regression')
+prms.add_argument('--learning_rate', type=float, default=None,
+                  help='Learning rate for PyTorch logistic regression')
+prms.add_argument('--num_epochs', type=int, default=None,
+                  help='Number of epochs for PyTorch logistic regression')
+prms.add_argument('--l1_penalty', type=float, default=None,
+                  help='L1 penalty multiplier for PyTorch logistic regression')
+prms.add_argument('--param_search', action='store_true',
+                  help='If flag is included, run a parameter search using the\
+                        values in config.py and ignore provided parameters')
+
 args = p.parse_args()
+
+if (not args.param_search) and (None in [args.batch_size,
+                                         args.learning_rate,
+                                         args.num_epochs,
+                                         args.l1_penalty]):
+    import sys
+    sys.exit('Error: must either include the "--param_search" flag'
+             ' or manually pass a single value for all parameters')
 
 if args.verbose:
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')
@@ -210,8 +233,18 @@ for gene_idx, gene_series in genes_df.iterrows():
 
         model_no += 1
 
+        if args.param_search:
+            torch_params = cfg.torch_param_choices
+        else:
+            torch_params = {
+                'batch_size': [args.batch_size],
+                'l1_penalty': [args.l1_penalty],
+                'learning_rate': [args.learning_rate],
+                'num_epochs': [args.num_epochs]
+            }
+
         # Find the best PyTorch model, by cross-validation on train set
-        torch_model = TorchLR(cfg.torch_param_choices,
+        torch_model = TorchLR(torch_params,
                               seed=args.seed,
                               num_iters=cfg.torch_num_iters,
                               num_inner_folds=cfg.torch_num_inner_folds,
@@ -225,8 +258,23 @@ for gene_idx, gene_series in genes_df.iterrows():
         best_torch_params = torch_model.best_params
 
         if hasattr(torch_model, 'results_df'):
-            torch_model.results_df.to_csv('./pytorch_results/torch_params_{}_{}.tsv'.format(
-                signal, args.seed), sep='\t')
+            torch_model.results_df.to_csv(os.path.join(args.results_dir,
+                                                       'torch_params_{}_{}.tsv'.format(
+                                                           signal, args.seed)), sep='\t')
+        else:
+            results_df = pd.DataFrame({
+                'batch_size': [args.batch_size],
+                'l1_penalty': [args.l1_penalty],
+                'learning_rate': [args.learning_rate],
+                'num_epochs': [args.num_epochs],
+                'train_loss': [losses[0]],
+                'tune_loss': [losses[1]]
+            })
+            results_df.to_csv(os.path.join(args.results_dir,
+                                           'torch_params_{}_s{}_l{}.tsv'.format(
+                                               signal, args.seed, args.l1_penalty)), sep='\t')
+
+
 
         # Find the best scikit-learn model
         cv_pipeline, y_pred_train_df, y_pred_test_df, y_cv_df = train_model(
@@ -340,7 +388,7 @@ for gene_idx, gene_series in genes_df.iterrows():
             cv_results['sklearn_tune_aupr'].append(sklearn_tune_results['aupr'])
 
             def calculate_accuracy(y, y_pred):
-                return np.linalg.norm((1 for i in range(len(y)) if y[i] == y_pred[i]), ord=0) / len(y)
+                return np.linalg.norm([1 for i in range(len(y)) if y[i] == y_pred[i]], ord=0) / len(y)
 
             cv_results['torch_train_acc'].append(
                     calculate_accuracy(y_subtrain, torch_pred_bn_train))
@@ -351,17 +399,33 @@ for gene_idx, gene_series in genes_df.iterrows():
             cv_results['sklearn_tune_acc'].append(
                     calculate_accuracy(y_tune, sklearn_pred_bn_tune))
 
-        with open(os.path.join(args.results_dir, 'cv_results_{}_{}.pkl'.format(signal, args.seed)),
-                  'wb') as f:
+        if args.param_search:
+            cv_results_file = os.path.join(args.results_dir,
+                                           'cv_results_{}_{}.pkl'.format(signal, args.seed))
+            torch_coef_file = os.path.join(args.results_dir,
+                                           'torch_coefs_{}_{}.tsv.gz'.format(signal, args.seed))
+            sklearn_coef_file = os.path.join(args.results_dir,
+                                             'sklearn_coefs_{}_{}.tsv.gz'.format(signal, args.seed))
+        else:
+            cv_results_file = os.path.join(args.results_dir,
+                                           'cv_results_{}_{}_l{}.pkl'.format(
+                                               signal, args.seed, args.l1_penalty))
+            torch_coef_file = os.path.join(args.results_dir,
+                                           'torch_coefs_{}_{}_l{}.tsv.gz'.format(
+                                               signal, args.seed, args.l1_penalty))
+            sklearn_coef_file = os.path.join(args.results_dir,
+                                             'sklearn_coefs_{}_{}_l{}.tsv.gz'.format(
+                                                 signal, args.seed, args.l1_penalty))
+
+
+        with open(cv_results_file, 'wb') as f:
             pkl.dump(cv_results, f)
 
-        torch_coef_df.to_csv(os.path.join(args.results_dir,
-                                          './pytorch_results/torch_coefs_{}_{}.tsv.gz'.format(signal, args.seed)),
+        torch_coef_df.to_csv(torch_coef_file,
                              sep='\t', index=False, compression='gzip',
                              float_format="%.5g")
 
-        sklearn_coef_df.to_csv(os.path.join(args.results_dir,
-                                            './pytorch_results/sklearn_coefs_{}_{}.tsv.gz'.format(signal, args.seed)),
-                             sep='\t', index=False, compression='gzip',
-                             float_format="%.5g")
+        sklearn_coef_df.to_csv(sklearn_coef_file,
+                               sep='\t', index=False, compression='gzip',
+                               float_format="%.5g")
 

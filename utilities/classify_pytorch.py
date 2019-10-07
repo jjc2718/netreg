@@ -94,7 +94,8 @@ class TorchLR:
         return params_map
 
 
-    def train_torch_model(self, X_train, X_test, y_train, y_test):
+    def train_torch_model(self, X_train, X_test, y_train, y_test,
+                          save_weights=False):
         """Wrapper function for PyTorch model training.
 
         If multiple hyperparameter choices are provided, get the best
@@ -111,7 +112,8 @@ class TorchLR:
         self.best_params = best_params
 
         losses, preds, preds_bn = self.torch_model(X_train, X_test, y_train, y_test,
-                                                   best_params)
+                                                   best_params,
+                                                   save_weights=save_weights)
 
         return losses, preds, preds_bn
 
@@ -199,7 +201,10 @@ class TorchLR:
                 optimizer.zero_grad()
                 y_pred = model(X_batch)
                 loss = criterion(y_pred, y_batch)
-                l1_loss = sum(torch.norm(param, 1) for param in model.parameters())
+                # add l1 loss
+                l1_loss = sum(torch.norm(param, 1)
+                                for name, param in model.named_parameters()
+                                if 'bias' not in name)
                 loss += l1_penalty * l1_loss
                 running_loss += loss
                 loss.backward()
@@ -301,7 +306,6 @@ class TorchLR:
                 print('-- Running parameter set {} of {}...'.format(ix+1, num_iters),
                       end='')
             params = {k: v[ix] for k, v in self.params_map.items()}
-            print(params)
             losses, y_preds, __ = self.torch_model(X_subtrain,
                                                    X_tune,
                                                    y_subtrain,
@@ -346,6 +350,7 @@ if __name__ == '__main__':
 
     p = argparse.ArgumentParser()
     p.add_argument('--gpu', action='store_true')
+    p.add_argument('--l1_penalty', type=float, default=0.0)
     p.add_argument('--seed', type=int, default=cfg.default_seed)
     p.add_argument('--verbose', action='store_true')
     args = p.parse_args()
@@ -356,11 +361,19 @@ if __name__ == '__main__':
         'l1_ratio': [0.15, 0.16, 0.2, 0.25, 0.3, 0.4]
     }
 
+    """
     torch_param_choices = {
         'learning_rate': [0.001, 0.0001, 0.00001],
         'batch_size': [10, 20, 50, 100],
         'num_epochs': [100, 200, 500, 1000],
         'l1_penalty': [0, 0.01, 0.1, 1, 10]
+    }
+    """
+    torch_param_choices = {
+        'learning_rate': [0.0005],
+        'batch_size': [50],
+        'num_epochs': [200],
+        'l1_penalty': [args.l1_penalty]
     }
 
     num_iters = 8
@@ -386,9 +399,6 @@ if __name__ == '__main__':
                                  seed=args.seed)
 
     y_pred_train, y_pred_test, y_pred_bn_train, y_pred_bn_test = y_pred
-    print(y_pred_train[:20].flatten())
-    print(y_pred_bn_train[:20].flatten())
-    print(y_train[:20])
 
     sk_train_acc = sum(
             [1 for i in range(len(y_pred_train))
@@ -403,13 +413,11 @@ if __name__ == '__main__':
     sk_test_results = get_threshold_metrics(y_test, y_pred_test)
 
     losses, preds, preds_bn = model.train_torch_model(X_train, X_test,
-                                                      y_train, y_test)
+                                                      y_train, y_test,
+                                                      save_weights=True)
 
     y_pred_train, y_pred_test = preds
     y_pred_bn_train, y_pred_bn_test = preds_bn
-    print(y_pred_train[:20].flatten())
-    print(y_pred_bn_train[:20].flatten())
-    print(y_train[:20])
 
     def calculate_accuracy(y, y_pred):
         return sum(1 for i in range(len(y)) if y[i] == y_pred[i]) / len(y)
@@ -451,3 +459,7 @@ if __name__ == '__main__':
         random_train_results['auroc'], random_test_results['auroc']))
     print('Random guessing train AUPRC: {:.3f}, test AUPRC: {:.3f}'.format(
         random_train_results['aupr'], random_test_results['aupr']))
+
+    sorted_weights = model.last_weights.flatten()
+    sorted_weights.sort()
+    print(sorted_weights[::-1])
