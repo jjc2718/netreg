@@ -53,6 +53,11 @@ class TorchLR:
         self.use_gpu = use_gpu
         self.verbose = verbose
 
+    @staticmethod
+    def calculate_accuracy(y, y_pred):
+        """Calculate accuracy given true labels and predicted labels."""
+        assert (y.ndim == 1 and y_pred.ndim == 1), "labels must be flattened"
+        return (y == y_pred).mean()
 
     def get_params_map(self, param_choices, num_iters=10):
         """Get random combinations of hyperparameters to search over.
@@ -419,11 +424,10 @@ if __name__ == '__main__':
     y_pred_train, y_pred_test = preds
     y_pred_bn_train, y_pred_bn_test = preds_bn
 
-    def calculate_accuracy(y, y_pred):
-        return sum(1 for i in range(len(y)) if y[i] == y_pred[i]) / len(y)
-
-    torch_train_acc = calculate_accuracy(y_train, y_pred_bn_train)
-    torch_test_acc = calculate_accuracy(y_test, y_pred_bn_test)
+    print(y_train.shape)
+    print(y_pred_bn_train.shape)
+    torch_train_acc = TorchLR.calculate_accuracy(y_train, y_pred_bn_train.flatten())
+    torch_test_acc = TorchLR.calculate_accuracy(y_test, y_pred_bn_test.flatten())
 
     torch_train_results = get_threshold_metrics(y_train, y_pred_train)
     torch_test_results = get_threshold_metrics(y_test, y_pred_test)
@@ -447,8 +451,8 @@ if __name__ == '__main__':
     y_pred_bn_train = (y_pred_train > 0.5).astype('int')
     y_pred_bn_test = (y_pred_test > 0.5).astype('int')
 
-    random_train_acc = calculate_accuracy(y_train, y_pred_bn_train)
-    random_test_acc = calculate_accuracy(y_test, y_pred_bn_test)
+    random_train_acc = TorchLR.calculate_accuracy(y_train, y_pred_bn_train)
+    random_test_acc = TorchLR.calculate_accuracy(y_test, y_pred_bn_test)
 
     random_train_results = get_threshold_metrics(y_train, y_pred_train)
     random_test_results = get_threshold_metrics(y_test, y_pred_test)
