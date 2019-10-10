@@ -7,7 +7,7 @@ def shuffle_same(X, y):
     return X[:, p], y[p]
 
 
-def simulate_ll(n, p, uncorr_frac, seed=1, verbose=False):
+def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1, verbose=False):
     """Simulate data from a log-linear model.
 
     Parameters
@@ -20,6 +20,9 @@ def simulate_ll(n, p, uncorr_frac, seed=1, verbose=False):
 
     uncorr_frac: float
         Fraction of features to be uncorrelated with outcome (between 0 and 1)
+
+    duplicate_features: int
+        Number of features to add that are duplicates of other features
 
     seed: int
         Seed for random number generator
@@ -37,18 +40,27 @@ def simulate_ll(n, p, uncorr_frac, seed=1, verbose=False):
         print('Number of informative features: {}'.format(p_corr))
         print('Number of uninformative features: {}'.format(p_uncorr))
 
-    # start by drawing features independently from a standard normal dist
-    # TODO: could add an option for counts in the future?
+    # start by drawing features independently from N(0, 1)
+    # TODO: could add an option for discrete data/counts in the future?
     X_corr = np.random.randn(n, p_corr)
     X_uncorr = np.random.randn(n, p_uncorr)
     X = np.concatenate((X_corr, X_uncorr), axis=1)
 
-    is_correlated = np.zeros(p).astype('bool')
+    if duplicate_features > 0:
+        # sample duplicate_features columns with replacement
+        # and add to end of current data matrix (will be shuffled later)
+        dup_cols = np.concatenate((range(X.shape[1]),
+                                   np.random.randint(0, X.shape[1], (duplicate_features,))))
+        X = X[:, dup_cols]
+
+    is_correlated = np.zeros(X.shape[1]).astype('bool')
     is_correlated[:p_corr] = True
 
+    # shuffle data and is_correlated indicators in same order, so we know
+    # which features are correlated/not correlated with outcome
     X, is_correlated = shuffle_same(X, is_correlated)
 
-    # draw regression coefficients (betas) from standard normal
+    # draw regression coefficients (betas) from N(0, 1)
     B = np.random.randn(p_corr+1)
 
     # calculate Bernoulli parameter pi(x_i) for each sample x_i
