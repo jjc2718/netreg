@@ -1,3 +1,7 @@
+"""
+Functions for simulating data from a log-linear model.
+
+"""
 import numpy as np
 
 def shuffle_same(X, y):
@@ -9,6 +13,9 @@ def shuffle_same(X, y):
 
 def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1, verbose=False):
     """Simulate data from a log-linear model.
+
+    Labels are generated from a subset of the features (thus some of
+    the features are uncorrelated with the label).
 
     Parameters
     ----------
@@ -29,6 +36,20 @@ def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1, verbose=False):
 
     verbose: bool
         Whether to print verbose output or not
+
+    Returns
+    -------
+    X: array_like, (n, p)
+        Simulated features/samples
+
+    y: array_like, (n, 1)
+        Simulated labels in {0, 1}
+
+    pis: array_like, (n, 1)
+        Bernoulli parameters used to generate labels
+
+    is_correlated: array_like, (p, 1)
+        Whether or not each feature is correlated with the label
 
     """
     np.random.seed(seed)
@@ -73,6 +94,11 @@ def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1, verbose=False):
 
 
 def split_train_test(n, train_frac, seed=1, verbose=False):
+    """Split n samples into train and test indices.
+
+    Gives floor(n * train_frac) indices for training samples (the rest should
+    be used for testing).
+    """
     np.random.seed(seed)
 
     n_train = int(train_frac * n)
