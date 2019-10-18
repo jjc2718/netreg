@@ -14,6 +14,8 @@ def shuffle_same(X, y):
 def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1, verbose=False):
     """Simulate data from a log-linear model.
 
+    See, for instance: https://stats.stackexchange.com/a/46525
+
     Labels are generated from a subset of the features (thus some of
     the features are uncorrelated with the label).
 
