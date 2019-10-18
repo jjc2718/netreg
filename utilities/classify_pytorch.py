@@ -35,9 +35,14 @@ class TorchLR:
                  use_gpu=False,
                  verbose=False):
 
+        # set random seeds
+        # https://pytorch.org/docs/stable/notes/randomness.html
         self.seed = seed
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
+        if torch.backends.cudnn.enabled:
+            torch.backends.cudnn.deterministic = True
+            torch.backends.cudnn.benchmark = False
 
         max_params_length = max(len(vs) for k, vs in params_map.items())
         # if there's only one choice provided for each hyperparameter,
