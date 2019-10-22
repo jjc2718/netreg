@@ -429,8 +429,6 @@ if __name__ == '__main__':
     y_pred_train, y_pred_test = preds
     y_pred_bn_train, y_pred_bn_test = preds_bn
 
-    print(y_train.shape)
-    print(y_pred_bn_train.shape)
     torch_train_acc = TorchLR.calculate_accuracy(y_train, y_pred_bn_train.flatten())
     torch_test_acc = TorchLR.calculate_accuracy(y_test, y_pred_bn_test.flatten())
 
@@ -469,6 +467,3 @@ if __name__ == '__main__':
     print('Random guessing train AUPRC: {:.3f}, test AUPRC: {:.3f}'.format(
         random_train_results['aupr'], random_test_results['aupr']))
 
-    sorted_weights = model.last_weights.flatten()
-    sorted_weights.sort()
-    print(sorted_weights[::-1])
