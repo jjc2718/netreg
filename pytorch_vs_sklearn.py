@@ -387,17 +387,14 @@ for gene_idx, gene_series in genes_df.iterrows():
             cv_results['sklearn_tune_auroc'].append(sklearn_tune_results['auroc'])
             cv_results['sklearn_tune_aupr'].append(sklearn_tune_results['aupr'])
 
-            def calculate_accuracy(y, y_pred):
-                return np.linalg.norm([1 for i in range(len(y)) if y[i] == y_pred[i]], ord=0) / len(y)
-
             cv_results['torch_train_acc'].append(
-                    calculate_accuracy(y_subtrain, torch_pred_bn_train))
+                    TorchLR.calculate_accuracy(y_subtrain, torch_pred_bn_train))
             cv_results['torch_tune_acc'].append(
-                    calculate_accuracy(y_tune, torch_pred_bn_tune))
+                    TorchLR.calculate_accuracy(y_tune, torch_pred_bn_tune))
             cv_results['sklearn_train_acc'].append(
-                    calculate_accuracy(y_subtrain, sklearn_pred_bn_train))
+                    TorchLR.calculate_accuracy(y_subtrain, sklearn_pred_bn_train))
             cv_results['sklearn_tune_acc'].append(
-                    calculate_accuracy(y_tune, sklearn_pred_bn_tune))
+                    TorchLR.calculate_accuracy(y_tune, sklearn_pred_bn_tune))
 
         if args.param_search:
             cv_results_file = os.path.join(args.results_dir,
