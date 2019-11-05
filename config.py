@@ -16,6 +16,13 @@ saved_coefs = fixtures_dir.joinpath('saved_coefs.tsv.gz').resolve()
 
 default_seed = 42
 
+# data generation parameters for regression tests
+test_params = {
+    'n_train': 100,
+    'n_test': 100,
+    'p': 200
+}
+
 # hyperparameters for classification experiments
 filter_prop = 0.05
 filter_count = 15

@@ -15,7 +15,8 @@ import simdata.simulate_loglinear as ll
 
 @pytest.fixture
 def classify_data():
-    X_train_df, X_test_df, y_train_df, y_test_df = fx.generate_data(cfg.default_seed)
+    X_train_df, X_test_df, y_train_df, y_test_df = fx.generate_data(cfg.default_seed,
+                                                                    cfg.test_params)
     return X_train_df, X_test_df, y_train_df, y_test_df
 
 

@@ -7,13 +7,8 @@ import config as cfg
 import simdata.simulate_loglinear as ll
 from tcga_util import train_model, extract_coefficients
 
-def generate_data(seed):
+def generate_data(seed, params):
     np.random.seed(seed)
-    params = {
-        'n_train': 10,
-        'n_test': 10,
-        'p': 10,
-    }
 
     # generate simulated data from a log-linear model
     # the details of the data don't really matter here, we're just making
@@ -73,7 +68,8 @@ def predict(X_train, X_test, y_train, y_test):
 if __name__ == '__main__':
 
     # generate data
-    X_train_df, X_test_df, y_train_df, y_test_df = generate_data(cfg.default_seed)
+    X_train_df, X_test_df, y_train_df, y_test_df = generate_data(cfg.default_seed,
+                                                                 cfg.test_params)
 
     # make predictions
     y_pred_train_df, y_pred_test_df, coef_df = predict(
