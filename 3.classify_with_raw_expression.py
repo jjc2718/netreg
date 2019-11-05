@@ -91,6 +91,7 @@ rnaseq_train_df, rnaseq_test_df = subset_genes_by_mad(
 
 # Scale RNAseq matrix the same way RNAseq was scaled for
 # compression algorithms
+# TODO: try z-scores here?
 train_fitted_scaler = MinMaxScaler().fit(rnaseq_train_df)
 rnaseq_train_df = pd.DataFrame(
     train_fitted_scaler.transform(rnaseq_train_df),
@@ -227,7 +228,7 @@ for gene_idx, gene_series in genes_df.iterrows():
             max_iter=cfg.max_iter,
         )
 
-        # Get metric  predictions
+        # Get metric predictions
         y_train_results = get_threshold_metrics(
             y_train_df.status, y_pred_train_df, drop=False
         )

@@ -8,6 +8,12 @@ models_dir = repo_root.joinpath('models').resolve()
 results_dir = repo_root.joinpath('results').resolve()
 scripts_dir = repo_root.joinpath('scripts').resolve()
 
+# location of saved classify results, for regression testing
+fixtures_dir = repo_root.joinpath('tests').joinpath('fixtures').resolve()
+saved_results_train = fixtures_dir.joinpath('saved_results_train.tsv.gz').resolve()
+saved_results_test = fixtures_dir.joinpath('saved_results_test.tsv.gz').resolve()
+saved_coefs = fixtures_dir.joinpath('saved_coefs.tsv.gz').resolve()
+
 default_seed = 42
 
 # hyperparameters for classification experiments
