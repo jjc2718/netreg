@@ -17,18 +17,16 @@ def load_raw_data(gene_list, verbose=False):
 
     # loading this data from the pancancer repo is very slow, so we
     # cache it in a pickle to speed up loading
-    pancan_fname = os.path.join(cfg.data_dir, 'pancancer_data.pkl')
-
-    if os.path.exists(pancan_fname):
+    if os.path.exists(cfg.pancan_data):
         if verbose:
             print('Loading pan-cancer data from cached pickle file...')
-        with open(pancan_fname, 'rb') as f:
+        with open(cfg.pancan_data, 'rb') as f:
             pancan_data = pkl.load(f)
     else:
         if verbose:
             print('Loading pan-cancer data from repo (warning: slow)...')
         pancan_data = load_pancancer_data()
-        with open(pancan_fname, 'wb') as f:
+        with open(cfg.pancan_data, 'wb') as f:
             pkl.dump(pancan_data, f)
 
     return (genes_df, pancan_data)
