@@ -10,13 +10,9 @@ import logging
 import pickle as pkl
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 
 import config as cfg
 from tcga_util import (
-    load_pancancer_data,
-    load_top_50,
-    subset_genes_by_mad,
     get_threshold_metrics,
     summarize_results,
     extract_coefficients,
@@ -26,6 +22,7 @@ from tcga_util import (
     process_y_matrix_cancertype,
     check_status
 )
+import utilities.data_utilities as du
 
 p = argparse.ArgumentParser()
 p.add_argument('--gene_list', nargs='*', default=None,
@@ -43,26 +40,7 @@ if args.verbose:
 np.random.seed(args.seed)
 algorithm = "raw"
 
-# load data
-logging.debug('Loading gene label data...')
-genes_df = load_top_50()
-if args.gene_list is not None:
-    genes_df = genes_df[genes_df['gene'].isin(args.gene_list)]
-    genes_df.reset_index(drop=True, inplace=True)
-
-# loading this data from the pancancer repo is very slow, so we
-# cache it in a pickle to speed up loading
-pancan_fname = os.path.join(cfg.data_dir, 'pancancer_data.pkl')
-
-if os.path.exists(pancan_fname):
-    logging.debug('Loading pan-cancer data from cached pickle file...')
-    with open(pancan_fname, 'rb') as f:
-        pancan_data = pkl.load(f)
-else:
-    logging.debug('Loading pan-cancer data from repo (warning: slow)...')
-    pancan_data = load_pancancer_data()
-    with open(pancan_fname, 'wb') as f:
-        pkl.dump(pancan_data, f)
+genes_df, pancan_data = du.load_raw_data(args.gene_list, verbose=args.verbose)
 
 (sample_freeze_df,
  mutation_df,
@@ -70,41 +48,7 @@ else:
  copy_gain_df,
  mut_burden_df) = pancan_data
 
-# Load and process X matrix
-logging.debug('Loading gene expression data...')
-rnaseq_train = (
-    os.path.join(cfg.data_dir,
-                 'train_tcga_expression_matrix_processed.tsv.gz')
-    )
-rnaseq_test = (
-    os.path.join(cfg.data_dir,
-                 'test_tcga_expression_matrix_processed.tsv.gz')
-    )
-
-rnaseq_train_df = pd.read_csv(rnaseq_train, index_col=0, sep='\t')
-rnaseq_test_df = pd.read_csv(rnaseq_test, index_col=0, sep='\t')
-
-# TODO: is option for subset by mad genes necessary?
-mad_file = os.path.join(cfg.data_dir, 'tcga_mad_genes.tsv')
-rnaseq_train_df, rnaseq_test_df = subset_genes_by_mad(
-    rnaseq_train_df, rnaseq_test_df, mad_file, cfg.num_features_raw)
-
-# Scale RNAseq matrix the same way RNAseq was scaled for
-# compression algorithms
-# TODO: try z-scores here?
-train_fitted_scaler = MinMaxScaler().fit(rnaseq_train_df)
-rnaseq_train_df = pd.DataFrame(
-    train_fitted_scaler.transform(rnaseq_train_df),
-    columns=rnaseq_train_df.columns,
-    index=rnaseq_train_df.index,
-)
-
-test_fitted_scaler = MinMaxScaler().fit(rnaseq_test_df)
-rnaseq_test_df = pd.DataFrame(
-    test_fitted_scaler.transform(rnaseq_test_df),
-    columns=rnaseq_test_df.columns,
-    index=rnaseq_test_df.index,
-)
+rnaseq_train_df, rnaseq_test_df = du.load_expression_data(verbose=args.verbose)
 
 # Track total metrics for each gene in one file
 metric_cols = [

@@ -8,6 +8,25 @@ models_dir = repo_root.joinpath('models').resolve()
 results_dir = repo_root.joinpath('results').resolve()
 scripts_dir = repo_root.joinpath('scripts').resolve()
 
+# location of saved expression data
+pancan_data = data_dir.joinpath('pancancer_data.pkl').resolve()
+mad_data = data_dir.joinpath('tcga_mad_genes.tsv').resolve()
+rnaseq_train = data_dir.joinpath(
+                    'train_tcga_expression_matrix_processed.tsv.gz').resolve()
+rnaseq_test = data_dir.joinpath(
+                    'test_tcga_expression_matrix_processed.tsv.gz').resolve()
+
+# parameters for classification using raw gene expression
+num_features_raw = 8000
+
+# hyperparameters for classification experiments
+filter_prop = 0.05
+filter_count = 15
+folds = 3
+max_iter = 100
+alphas = [0.1, 0.13, 0.15, 0.2, 0.25, 0.3]
+l1_ratios = [0.15, 0.16, 0.2, 0.25, 0.3, 0.4]
+
 # location of saved classify results, for regression testing
 fixtures_dir = repo_root.joinpath('tests').joinpath('fixtures').resolve()
 saved_results_train = fixtures_dir.joinpath('saved_results_train.tsv.gz').resolve()
@@ -22,17 +41,6 @@ test_params = {
     'n_test': 100,
     'p': 200
 }
-
-# hyperparameters for classification experiments
-filter_prop = 0.05
-filter_count = 15
-folds = 3
-max_iter = 100
-alphas = [0.1, 0.13, 0.15, 0.2, 0.25, 0.3]
-l1_ratios = [0.15, 0.16, 0.2, 0.25, 0.3, 0.4]
-
-# parameters for classification using raw gene expression
-num_features_raw = 8000
 
 # hyperparameters for PyTorch logistic regression
 torch_param_choices = {

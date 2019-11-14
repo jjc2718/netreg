@@ -12,8 +12,6 @@ import pandas as pd
 
 import config as cfg
 from tcga_util import (
-    load_pancancer_data,
-    load_top_50,
     get_threshold_metrics,
     summarize_results,
     extract_coefficients,
@@ -24,7 +22,7 @@ from tcga_util import (
     check_status,
 )
 from data_models import DataModel
-
+import utilities.data_utilities as du
 
 p = argparse.ArgumentParser()
 p.add_argument('--algorithm', default=None,
@@ -48,22 +46,6 @@ algs_to_run = ([args.algorithm] if args.algorithm
 if args.verbose:
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
-# load data
-logging.debug('Loading gene label data...')
-genes_df = load_top_50()
-if args.gene_list is not None:
-    genes_df = genes_df[genes_df['gene'].isin(args.gene_list)]
-    genes_df.reset_index(drop=True, inplace=True)
-
-logging.debug('Loading pan-cancer data and building feature matrices...')
-# TODO: this data can probably be cached somewhere to speed things up,
-#       loading this data is currently v. slow
-(sample_freeze_df,
- mutation_df,
- copy_loss_df,
- copy_gain_df,
- mut_burden_df) = load_pancancer_data()
-
 # Setup column names for output files
 metric_cols = [
     "auroc",
@@ -76,7 +58,16 @@ metric_cols = [
     "data_type",
 ]
 
+genes_df, pancan_data = du.load_raw_data(args.gene_list, verbose=args.verbose)
+
+(sample_freeze_df,
+ mutation_df,
+ copy_loss_df,
+ copy_gain_df,
+ mut_burden_df) = pancan_data
+
 # Obtain a dictionary of file directories for loading each feature matrix (X)
+# TODO: I think this can be made much simpler
 z_matrix_dict, num_models = build_feature_dictionary(args.models_dir)
 num_models *= (len(algs_to_run) / len(DataModel.list_algorithms()))
 num_models = int(num_models)
