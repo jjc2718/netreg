@@ -11,7 +11,7 @@ import pandas as pd
 
 import config as cfg
 from data_models import DataModel
-from tcga_util import subset_genes_by_mad
+from utilities.data_utilities import subset_genes_by_mad
 
 def shuffle_train_genes(train_df):
     # randomly permute genes of each sample in the rnaseq matrix
