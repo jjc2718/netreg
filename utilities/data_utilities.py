@@ -32,7 +32,8 @@ def load_raw_data(gene_list, verbose=False):
     return (genes_df, pancan_data)
 
 
-def load_expression_data(verbose=False):
+def load_expression_data(subset_mad_genes=cfg.num_features_raw,
+                         scale_input=False, verbose=False):
     # Load and process X matrix
     if verbose:
         print('Loading gene expression data...')
@@ -40,24 +41,26 @@ def load_expression_data(verbose=False):
     rnaseq_train_df = pd.read_csv(cfg.rnaseq_train, index_col=0, sep='\t')
     rnaseq_test_df = pd.read_csv(cfg.rnaseq_test, index_col=0, sep='\t')
 
-    rnaseq_train_df, rnaseq_test_df = subset_genes_by_mad(
-        rnaseq_train_df, rnaseq_test_df, cfg.mad_data, cfg.num_features_raw)
+    if subset_mad_genes is not None:
+        rnaseq_train_df, rnaseq_test_df = subset_genes_by_mad(
+            rnaseq_train_df, rnaseq_test_df, cfg.mad_data, subset_mad_genes)
 
     # Scale RNAseq matrix the same way RNAseq was scaled for
     # compression algorithms
-    train_fitted_scaler = MinMaxScaler().fit(rnaseq_train_df)
-    rnaseq_train_df = pd.DataFrame(
-        train_fitted_scaler.transform(rnaseq_train_df),
-        columns=rnaseq_train_df.columns,
-        index=rnaseq_train_df.index,
-    )
+    if scale_input:
+        train_fitted_scaler = MinMaxScaler().fit(rnaseq_train_df)
+        rnaseq_train_df = pd.DataFrame(
+            train_fitted_scaler.transform(rnaseq_train_df),
+            columns=rnaseq_train_df.columns,
+            index=rnaseq_train_df.index,
+        )
 
-    test_fitted_scaler = MinMaxScaler().fit(rnaseq_test_df)
-    rnaseq_test_df = pd.DataFrame(
-        test_fitted_scaler.transform(rnaseq_test_df),
-        columns=rnaseq_test_df.columns,
-        index=rnaseq_test_df.index,
-    )
+        test_fitted_scaler = MinMaxScaler().fit(rnaseq_test_df)
+        rnaseq_test_df = pd.DataFrame(
+            test_fitted_scaler.transform(rnaseq_test_df),
+            columns=rnaseq_test_df.columns,
+            index=rnaseq_test_df.index,
+        )
 
     return (rnaseq_train_df, rnaseq_test_df)
 
