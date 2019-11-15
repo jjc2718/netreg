@@ -1,5 +1,5 @@
 """
-Regression tests for logistic regression/classification implementation
+Regression tests for classifier implementation
 
 """
 import os

@@ -1,3 +1,11 @@
+"""
+Script to generate saved predictions for regression testing.
+
+This just uses a simple simulated dataset, mostly so it will run reasonably
+quickly. The data itself doesn't really matter for purposes of the regression
+test, we just need to make sure that the model generates the same predictions.
+
+"""
 import os
 import numpy as np
 import pandas as pd
@@ -11,8 +19,6 @@ def generate_data(seed, params):
     np.random.seed(seed)
 
     # generate simulated data from a log-linear model
-    # the details of the data don't really matter here, we're just making
-    # sure the model gives the same output as before
     X, y, _, __ = ll.simulate_ll(params['n_train']+params['n_test'],
                                  params['p'], 0, seed=seed)
     train_ixs = ll.split_train_test(params['n_train']+params['n_test'],
