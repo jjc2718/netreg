@@ -40,7 +40,7 @@ class TorchLR:
         self.seed = seed
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
-        if torch.backends.cudnn.enabled:
+        if use_gpu and torch.backends.cudnn.enabled:
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
 

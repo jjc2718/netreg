@@ -2,7 +2,7 @@
 **/.ipynb_checkpoints/*
 
 data/*
-models/*
+compression_models/*
 output/*
 pytorch_results/*
 results/*

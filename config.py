@@ -1,10 +1,13 @@
 import pathlib
 
-repo_root = pathlib.Path()
+# home is where the file is
+repo_root = pathlib.Path(__file__).parents[0]
 
+# important subdirectories
 data_dir = repo_root.joinpath('data').resolve()
+networks_dir = data_dir.joinpath('networks').resolve()
 pathway_data = data_dir.joinpath('pathway_data').resolve()
-models_dir = repo_root.joinpath('models').resolve()
+models_dir = repo_root.joinpath('compression_models').resolve()
 results_dir = repo_root.joinpath('results').resolve()
 scripts_dir = repo_root.joinpath('scripts').resolve()
 
