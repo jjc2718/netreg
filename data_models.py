@@ -247,49 +247,26 @@ class DataModel():
         output_dir - Directory to write models to
         file_suffix - Suffix of filename (containing, for example, the seed)
         """
-        if hasattr(self, 'pca_df'):
+        def write_to_file(method_df, method_test_df, prefix):
             output_file = os.path.join(output_dir,
-                                       'pca_{}'.format(file_suffix))
+                                       '{}_{}'.format(prefix, file_suffix))
             if test_set:
-                pca_df = pd.DataFrame(self.pca_test_df,
-                                      index=self.test_df.index,
-                                      columns=self.pca_df.columns)
-            else:
-                pca_df = self.pca_df
-            pca_df.to_csv(output_file, sep='\t', compression='gzip')
+                method_df = pd.DataFrame(method_test_df,
+                                         index=self.test_df.index,
+                                         columns=method_df.columns)
+            method_df.to_csv(output_file, sep='\t', compression='gzip')
+
+        if hasattr(self, 'pca_df'):
+            write_to_file(self.pca_df, self.pca_test_df, 'pca')
 
         if hasattr(self, 'ica_df'):
-            output_file = os.path.join(output_dir,
-                                       'ica_{}'.format(file_suffix))
-            if test_set:
-                ica_df = pd.DataFrame(self.ica_test_df,
-                                      index=self.test_df.index,
-                                      columns=self.ica_df.columns)
-            else:
-                ica_df = self.ica_df
-            ica_df.to_csv(output_file, sep='\t', compression='gzip')
+            write_to_file(self.ica_df, self.ica_test_df, 'ica')
 
         if hasattr(self, 'nmf_df'):
-            output_file = os.path.join(output_dir,
-                                       'nmf_{}'.format(file_suffix))
-            if test_set:
-                nmf_df = pd.DataFrame(self.nmf_test_df,
-                                      index=self.test_df.index,
-                                      columns=self.nmf_df.columns)
-            else:
-                nmf_df = self.nmf_df
-            nmf_df.to_csv(output_file, sep='\t', compression='gzip')
+            write_to_file(self.nmf_df, self.nmf_test_df, 'nmf')
 
         if hasattr(self, 'plier_df'):
-            output_file = os.path.join(output_dir,
-                                       'plier_{}'.format(file_suffix))
-            if test_set:
-                plier_df = pd.DataFrame(self.plier_test_df,
-                                        index=self.test_df.index,
-                                        columns=self.plier_df.columns)
-            else:
-                plier_df = self.plier_df
-            plier_df.to_csv(output_file, sep='\t', compression='gzip')
+            write_to_file(self.plier_df, self.plier_test_df, 'plier')
 
 
     def write_weight_matrices(self, output_dir, file_suffix):
@@ -299,22 +276,19 @@ class DataModel():
         output_dir - Directory to write models to
         file_suffix - Suffix of filename (containing, for example, the seed)
         """
+        def write_to_file(weights_df, prefix):
+            output_file = os.path.join(output_dir,
+                                       '{}_{}'.format(prefix, file_suffix))
+            weights_df.to_csv(output_file, sep='\t', compression='gzip')
+
         if hasattr(self, 'pca_df'):
-            output_file = os.path.join(output_dir,
-                                       'pca_{}'.format(file_suffix))
-            self.pca_weights.to_csv(output_file, sep='\t', compression='gzip')
+            write_to_file(self.pca_weights, 'pca')
         if hasattr(self, 'ica_df'):
-            output_file = os.path.join(output_dir,
-                                       'ica_{}'.format(file_suffix))
-            self.ica_weights.to_csv(output_file, sep='\t', compression='gzip')
+            write_to_file(self.ica_weights, 'ica')
         if hasattr(self, 'nmf_df'):
-            output_file = os.path.join(output_dir,
-                                       'nmf_{}'.format(file_suffix))
-            self.nmf_weights.to_csv(output_file, sep='\t', compression='gzip')
+            write_to_file(self.nmf_weights, 'nmf')
         if hasattr(self, 'plier_df'):
-            output_file = os.path.join(output_dir,
-                                       'plier_{}'.format(file_suffix))
-            self.plier_weights.to_csv(output_file, sep='\t', compression='gzip')
+            write_to_file(self.plier_weights, 'plier')
 
 
     def compile_reconstruction(self, test_set=False):
@@ -336,62 +310,43 @@ class DataModel():
         all_reconstruction = {}
         reconstruct_mat = {}
 
-        if hasattr(self, 'pca_df'):
+        def add_method_reconstruction(method_df, method_test_df,
+                                      method_name, method_object,
+                                      num_genes=self.num_genes,
+                                      is_plier=False):
             if test_set:
-                pca_df = self.pca_test_df
+                method_df = method_test_df
+            if is_plier:
+                method_reconstruct = np.dot(method_df, self.plier_weights)
             else:
-                pca_df = self.pca_df
+                method_reconstruct = method_object.inverse_transform(method_df)
+            method_recon = self._approx_keras_binary_cross_entropy(
+                method_reconstruct, input_df, num_genes)
+            all_reconstruction[method_name] = [method_recon]
+            reconstruct_mat[method_name] = pd.DataFrame(method_reconstruct,
+                                                        index=input_df.index,
+                                                        columns=input_df.columns)
+            return all_reconstruction, reconstruct_mat
 
-            pca_reconstruct = self.pca_fit.inverse_transform(pca_df)
-            pca_recon = self._approx_keras_binary_cross_entropy(
-                pca_reconstruct, input_df, self.num_genes)
-            all_reconstruction['pca'] = [pca_recon]
-            reconstruct_mat['pca'] = pd.DataFrame(pca_reconstruct,
-                                                  index=input_df.index,
-                                                  columns=input_df.columns)
+        if hasattr(self, 'pca_df'):
+            all_reconstruction, reconstruct_mat = add_method_reconstruction(
+                    self.pca_df, self.pca_test_df, 'pca', self.pca_fit)
 
         if hasattr(self, 'ica_df'):
-            if test_set:
-                ica_df = self.ica_test_df
-            else:
-                ica_df = self.ica_df
-
-            ica_reconstruct = self.ica_fit.inverse_transform(ica_df)
-            ica_recon = self._approx_keras_binary_cross_entropy(
-                ica_reconstruct, input_df, self.num_genes)
-            all_reconstruction['ica'] = [ica_recon]
-            reconstruct_mat['ica'] = pd.DataFrame(ica_reconstruct,
-                                                  index=input_df.index,
-                                                  columns=input_df.columns)
+            all_reconstruction, reconstruct_mat = add_method_reconstruction(
+                    self.ica_df, self.ica_test_df, 'ica', self.ica_fit)
 
         if hasattr(self, 'nmf_df'):
-            if test_set:
-                nmf_df = self.nmf_test_df
-            else:
-                nmf_df = self.nmf_df
-            nmf_reconstruct = self.nmf_fit.inverse_transform(nmf_df)
-            nmf_recon = self._approx_keras_binary_cross_entropy(
-                nmf_reconstruct, input_df, self.num_genes)
-            all_reconstruction['nmf'] = [nmf_recon]
-            reconstruct_mat['nmf'] = pd.DataFrame(nmf_reconstruct,
-                                                  index=input_df.index,
-                                                  columns=input_df.columns)
+            all_reconstruction, reconstruct_mat = add_method_reconstruction(
+                    self.nmf_df, self.nmf_test_df, 'nmf', self.nmf_fit)
 
         if hasattr(self, 'plier_df'):
             # have to do filtering to genes present in pathway dataset here too
-            input_df = input_df[self.plier_weights.columns.astype('str')]
+            plier_input_df = input_df[self.plier_weights.columns.astype('str')]
             num_genes = len(self.plier_weights.columns)
-            if test_set:
-                plier_df = self.plier_test_df
-            else:
-                plier_df = self.plier_df
-            plier_reconstruct = np.dot(plier_df, self.plier_weights)
-            plier_recon = self._approx_keras_binary_cross_entropy(
-                plier_reconstruct, input_df, num_genes)
-            all_reconstruction['plier'] = [plier_recon]
-            reconstruct_mat['plier'] = pd.DataFrame(plier_reconstruct,
-                                                    index=input_df.index,
-                                                    columns=input_df.columns)
+            all_reconstruction, reconstruct_mat = add_method_reconstruction(
+                    self.plier_df, self.plier_test_df, 'plier', self.plier_fit,
+                    num_genes, is_plier=True)
 
         return pd.DataFrame(all_reconstruction), reconstruct_mat
 

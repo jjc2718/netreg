@@ -11,7 +11,7 @@ import pandas as pd
 
 import config as cfg
 from data_models import DataModel
-from tcga_util import subset_genes_by_mad
+import utilities.data_utilities as du
 
 def shuffle_train_genes(train_df):
     # randomly permute genes of each sample in the rnaseq matrix
@@ -35,7 +35,8 @@ p.add_argument('-k', '--num_components', type=int,
                help='dimensionality of z')
 p.add_argument('-n', '--num_seeds', type=int, default=5,
                help='number of different seeds to run on current data')
-p.add_argument('-m', '--subset_mad_genes', type=int, default=8000,
+p.add_argument('-m', '--subset_mad_genes', type=int,
+               default=cfg.num_features_raw,
                help='subset num genes based on mean absolute deviation')
 p.add_argument('-o', '--models_dir', default=cfg.models_dir,
                help='where to save the output files')
@@ -55,24 +56,9 @@ if args.verbose:
     logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
 # load input expression data
-logging.debug('Loading gene expression data...')
-rnaseq_train = (
-    os.path.join(cfg.data_dir,
-                 'train_tcga_expression_matrix_processed.tsv.gz')
-    )
-rnaseq_test = (
-    os.path.join(cfg.data_dir,
-                 'test_tcga_expression_matrix_processed.tsv.gz')
-    )
-
-rnaseq_train_df = pd.read_csv(rnaseq_train, index_col=0, sep='\t')
-rnaseq_test_df = pd.read_csv(rnaseq_test, index_col=0, sep='\t')
-
-# determine most variably expressed genes and subset, if necessary
-if args.subset_mad_genes is not None:
-    mad_file = os.path.join(cfg.data_dir, 'tcga_mad_genes.tsv')
-    rnaseq_train_df, rnaseq_test_df = subset_genes_by_mad(
-        rnaseq_train_df, rnaseq_test_df, mad_file, args.subset_mad_genes)
+rnaseq_train_df, rnaseq_test_df = du.load_expression_data(
+        subset_mad_genes=args.subset_mad_genes, scale_input=False,
+        verbose=args.verbose)
 
 dm = DataModel(df=rnaseq_train_df, test_df=rnaseq_test_df)
 # TODO: per-algorithm transformations (e.g. NMF doesn't work with negative
