@@ -20,13 +20,9 @@ import config as cfg
 from utilities.classify_pytorch import TorchLR
 from tcga_util import (
     train_model,
-    load_pancancer_data,
-    load_top_50,
-    subset_genes_by_mad,
     get_threshold_metrics,
     extract_coefficients,
     align_matrices,
-    process_y_matrix,
     check_status
 )
 

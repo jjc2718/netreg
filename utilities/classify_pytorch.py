@@ -32,6 +32,7 @@ class TorchLR:
                  seed=1,
                  num_iters=10,
                  num_inner_folds=4,
+                 network_file=None,
                  use_gpu=False,
                  verbose=False):
 
@@ -43,6 +44,15 @@ class TorchLR:
         if use_gpu and torch.backends.cudnn.enabled:
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
+
+        # if both network_file and network_penalty are provided, load network
+        # data and calculate graph Laplacian
+        if network_file is not None and params_map['network_penalty'] != 0:
+            import networkx as nx
+            G = nx.read_edgelist(network_file)
+            self.laplacian = nx.laplacian_matrix(G)
+        else:
+            self.laplacian = None
 
         max_params_length = max(len(vs) for k, vs in params_map.items())
         # if there's only one choice provided for each hyperparameter,
@@ -58,11 +68,31 @@ class TorchLR:
         self.use_gpu = use_gpu
         self.verbose = verbose
 
+
+    def _laplacian_penalty(L, w):
+        """Calculate w^{T}Lw for weights w and graph Laplacian L.
+
+        Assumes L is a CSR-formatted sparse matrix and w is a 1D tensor.
+        """
+
+        def _convert_csr_to_sparse_inputs(X):
+            # from code at https://github.com/suinleelab/attributionpriors
+            import scipy.sparse as sp
+            coo = sp.coo_matrix(X)
+            indices = np.mat([coo.row, coo.col]).transpose()
+            return indices, coo.data, coo.shape
+
+        indices, values, shape = _convert_csr_to_sparse_inputs(L)
+        L = torch.sparse.FloatTensor(indices, values, shape)
+        return torch.mm(w.view(1, -1), torch.sparse.mm(L, w.view(-1, 1)))
+
+
     @staticmethod
     def calculate_accuracy(y, y_pred):
         """Calculate accuracy given true labels and predicted labels."""
         assert (y.ndim == 1 and y_pred.ndim == 1), "labels must be flattened"
         return (y == y_pred).mean()
+
 
     def get_params_map(self, param_choices, num_iters=10):
         """Get random combinations of hyperparameters to search over.
@@ -168,6 +198,9 @@ class TorchLR:
         num_epochs = params['num_epochs']
         l1_penalty = params['l1_penalty']
 
+        if self.laplacian is not None:
+            network_penalty = params['network_penalty']
+
         # Weight loss function based on training data label imbalance
         # see, e.g. https://discuss.pytorch.org/t/about-bcewithlogitslosss-pos-weights/22567/2
         #
@@ -211,14 +244,29 @@ class TorchLR:
                 optimizer.zero_grad()
                 y_pred = model(X_batch)
                 loss = criterion(y_pred, y_batch)
+
                 # add l1 loss
                 l1_loss = sum(torch.norm(param, 1)
                                 for name, param in model.named_parameters()
                                 if 'bias' not in name)
                 loss += l1_penalty * l1_loss
+
+                weights = model.linear.weight.data
+                print(weights)
+                exit()
+
+                # add network penalty if applicable
+                if self.laplacian is not None:
+                    weights = model.linear.weight.data
+                    print(weights)
+                    exit()
+                    network_loss = _laplacian_penalty(self.laplacian, weights)
+                    loss += network_penalty * network_loss
+
                 running_loss += loss
                 loss.backward()
                 optimizer.step()
+
             scheduler.step(running_loss)
 
         if save_weights:
