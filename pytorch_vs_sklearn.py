@@ -71,26 +71,7 @@ if args.verbose:
 np.random.seed(args.seed)
 algorithm = "raw"
 
-# load data
-logging.debug('Loading gene label data...')
-genes_df = load_top_50()
-if args.gene_list is not None:
-    genes_df = genes_df[genes_df['gene'].isin(args.gene_list)]
-    genes_df.reset_index(drop=True, inplace=True)
-
-# loading this data from the pancancer repo is very slow, so we
-# cache it in a pickle to speed up loading
-pancan_fname = os.path.join(cfg.data_dir, 'pancancer_data.pkl')
-
-if os.path.exists(pancan_fname):
-    logging.debug('Loading pan-cancer data from cached pickle file...')
-    with open(pancan_fname, 'rb') as f:
-        pancan_data = pkl.load(f)
-else:
-    logging.debug('Loading pan-cancer data from repo (warning: slow)...')
-    pancan_data = load_pancancer_data()
-    with open(pancan_fname, 'wb') as f:
-        pkl.dump(pancan_data, f)
+genes_df, pancan_data = du.load_raw_data(args.gene_list, verbose=args.verbose)
 
 (sample_freeze_df,
  mutation_df,
@@ -98,39 +79,7 @@ else:
  copy_gain_df,
  mut_burden_df) = pancan_data
 
-# Load and process X matrix
-logging.debug('Loading gene expression data...')
-rnaseq_train = (
-    os.path.join(cfg.data_dir,
-                 'train_tcga_expression_matrix_processed.tsv.gz')
-    )
-rnaseq_test = (
-    os.path.join(cfg.data_dir,
-                 'test_tcga_expression_matrix_processed.tsv.gz')
-    )
-
-rnaseq_train_df = pd.read_csv(rnaseq_train, index_col=0, sep='\t')
-rnaseq_test_df = pd.read_csv(rnaseq_test, index_col=0, sep='\t')
-
-mad_file = os.path.join(cfg.data_dir, 'tcga_mad_genes.tsv')
-rnaseq_train_df, rnaseq_test_df = subset_genes_by_mad(
-    rnaseq_train_df, rnaseq_test_df, mad_file, cfg.num_features_raw)
-
-# Scale RNAseq matrix the same way RNAseq was scaled for
-# compression algorithms
-train_fitted_scaler = MinMaxScaler().fit(rnaseq_train_df)
-rnaseq_train_df = pd.DataFrame(
-    train_fitted_scaler.transform(rnaseq_train_df),
-    columns=rnaseq_train_df.columns,
-    index=rnaseq_train_df.index,
-)
-
-test_fitted_scaler = MinMaxScaler().fit(rnaseq_test_df)
-rnaseq_test_df = pd.DataFrame(
-    test_fitted_scaler.transform(rnaseq_test_df),
-    columns=rnaseq_test_df.columns,
-    index=rnaseq_test_df.index,
-)
+rnaseq_train_df, rnaseq_test_df = du.load_expression_data(verbose=args.verbose)
 
 # Track total metrics for each gene in one file
 metric_cols = [
@@ -162,31 +111,7 @@ for gene_idx, gene_series in genes_df.iterrows():
     os.makedirs(gene_dir, exist_ok=True)
 
     # Process the y matrix for the given gene or pathway
-    y_mutation_df = mutation_df.loc[:, gene_name]
-
-    # Include copy number gains for oncogenes
-    # and copy number loss for tumor suppressor genes (TSG)
-    include_copy = True
-    if classification == "Oncogene":
-        y_copy_number_df = copy_gain_df.loc[:, gene_name]
-    elif classification == "TSG":
-        y_copy_number_df = copy_loss_df.loc[:, gene_name]
-    else:
-        y_copy_number_df = pd.DataFrame()
-        include_copy = False
-
-    y_df = process_y_matrix(
-        y_mutation=y_mutation_df,
-        y_copy=y_copy_number_df,
-        include_copy=include_copy,
-        gene=gene_name,
-        sample_freeze=sample_freeze_df,
-        mutation_burden=mut_burden_df,
-        filter_count=cfg.filter_count,
-        filter_prop=cfg.filter_prop,
-        output_directory=gene_dir,
-        hyper_filter=5,
-    )
+    y_df = du.load_labels(gene_name, pancan_data)
 
     model_no = 1
 
