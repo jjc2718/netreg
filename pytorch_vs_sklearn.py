@@ -79,7 +79,8 @@ genes_df, pancan_data = du.load_raw_data(args.gene_list, verbose=args.verbose)
  copy_gain_df,
  mut_burden_df) = pancan_data
 
-rnaseq_train_df, rnaseq_test_df = du.load_expression_data(verbose=args.verbose)
+rnaseq_train_df, rnaseq_test_df = du.load_expression_data(verbose=args.verbose,
+                                                          scale_input=True)
 
 # Track total metrics for each gene in one file
 metric_cols = [
