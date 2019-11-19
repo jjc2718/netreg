@@ -14,9 +14,9 @@ import pickle as pkl
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import KFold
-from sklearn.preprocessing import MinMaxScaler
 
 import config as cfg
+import utilities.data_utilities as du
 from utilities.classify_pytorch import TorchLR
 from tcga_util import (
     train_model,
@@ -108,7 +108,7 @@ for gene_idx, gene_series in genes_df.iterrows():
     os.makedirs(gene_dir, exist_ok=True)
 
     # Process the y matrix for the given gene or pathway
-    y_df = du.load_labels(gene_name, pancan_data)
+    y_df = du.load_labels(gene_name, classification, gene_dir, pancan_data)
 
     model_no = 1
 

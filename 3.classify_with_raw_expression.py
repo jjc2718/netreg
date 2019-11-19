@@ -80,7 +80,7 @@ for gene_idx, gene_series in genes_df.iterrows():
         continue
 
     # Process the y matrix for the given gene or pathway
-    y_df = du.load_labels(gene_name, pancan_data)
+    y_df = du.load_labels(gene_name, classification, gene_dir, pancan_data)
 
     model_no = 1
     for signal in ["signal", "shuffled"]:

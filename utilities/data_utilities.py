@@ -122,7 +122,8 @@ def subset_genes_by_mad(train_df, test_df, mad_file, subset_mad_genes):
     return (train_df, test_df)
 
 
-def load_labels(gene_name, pancan_data, include_copy=True):
+def load_labels(gene_name, classification, gene_dir, pancan_data,
+                include_copy=True):
     """Load classification labels using processed TCGA data."""
 
     # unpack pancancer data

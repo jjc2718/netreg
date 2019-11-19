@@ -91,7 +91,7 @@ for gene_idx, gene_series in genes_df.iterrows():
         continue
 
     # Process the y matrix for the given gene or pathway
-    y_df = du.load_labels(gene_name, pancan_data)
+    y_df = du.load_labels(gene_name, classification, gene_dir, pancan_data)
 
     # Now, perform all the analyses for each X matrix
     model_no = 1
