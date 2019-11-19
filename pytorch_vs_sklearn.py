@@ -310,9 +310,11 @@ for gene_idx, gene_series in genes_df.iterrows():
             cv_results['sklearn_tune_aupr'].append(sklearn_tune_results['aupr'])
 
             cv_results['torch_train_acc'].append(
-                    TorchLR.calculate_accuracy(y_subtrain, torch_pred_bn_train))
+                    TorchLR.calculate_accuracy(y_subtrain,
+                                               torch_pred_bn_train.flatten()))
             cv_results['torch_tune_acc'].append(
-                    TorchLR.calculate_accuracy(y_tune, torch_pred_bn_tune))
+                    TorchLR.calculate_accuracy(y_tune,
+                                               torch_pred_bn_tune.flatten()))
             cv_results['sklearn_train_acc'].append(
                     TorchLR.calculate_accuracy(y_subtrain, sklearn_pred_bn_train))
             cv_results['sklearn_tune_acc'].append(

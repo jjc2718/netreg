@@ -33,6 +33,7 @@ class TorchLR:
                  num_iters=10,
                  num_inner_folds=4,
                  network_file=None,
+                 network_features=None,
                  use_gpu=False,
                  verbose=False):
 
@@ -48,8 +49,11 @@ class TorchLR:
         # if both network_file and network_penalty are provided, load network
         # data and calculate graph Laplacian
         if network_file is not None and params_map['network_penalty'] != 0:
+            assert network_features is not None, (
+                'list of features in network should be included')
+            self.network_features = network_features
             import networkx as nx
-            G = nx.read_edgelist(network_file)
+            G = nx.read_weighted_edgelist(network_file, delimiter='\t')
             self.laplacian = nx.laplacian_matrix(G)
         else:
             self.laplacian = None
@@ -69,22 +73,23 @@ class TorchLR:
         self.verbose = verbose
 
 
-    def _laplacian_penalty(L, w):
+    def _laplacian_penalty(self, L, w):
         """Calculate w^{T}Lw for weights w and graph Laplacian L.
 
         Assumes L is a CSR-formatted sparse matrix and w is a 1D tensor.
         """
-
         def _convert_csr_to_sparse_inputs(X):
             # from code at https://github.com/suinleelab/attributionpriors
             import scipy.sparse as sp
             coo = sp.coo_matrix(X)
-            indices = np.mat([coo.row, coo.col]).transpose()
-            return indices, coo.data, coo.shape
+            indices = torch.LongTensor(np.mat([coo.row, coo.col]))
+            values = torch.FloatTensor(coo.data)
+            return indices, values, coo.shape
 
         indices, values, shape = _convert_csr_to_sparse_inputs(L)
-        L = torch.sparse.FloatTensor(indices, values, shape)
-        return torch.mm(w.view(1, -1), torch.sparse.mm(L, w.view(-1, 1)))
+        L = torch.sparse.FloatTensor(indices, values, (20, 20))
+        penalty = torch.mm(w.view(1, -1), torch.sparse.mm(L, w.view(-1, 1)))
+        return penalty.view(-1)
 
 
     @staticmethod
@@ -251,17 +256,14 @@ class TorchLR:
                                 if 'bias' not in name)
                 loss += l1_penalty * l1_loss
 
-                weights = model.linear.weight.data
-                print(weights)
-                exit()
-
                 # add network penalty if applicable
                 if self.laplacian is not None:
-                    weights = model.linear.weight.data
-                    print(weights)
-                    exit()
-                    network_loss = _laplacian_penalty(self.laplacian, weights)
-                    loss += network_penalty * network_loss
+                    # only penalize features that are in the network
+                    network_weights = model.linear.weight.data.reshape(-1)
+                    network_weights = network_weights[self.network_features]
+                    network_loss = self._laplacian_penalty(self.laplacian,
+                                                           network_weights)
+                    loss += network_penalty * float(network_loss)
 
                 running_loss += loss
                 loss.backward()
