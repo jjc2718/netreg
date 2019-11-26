@@ -34,6 +34,7 @@ class TorchLR:
                  num_inner_folds=4,
                  network_file=None,
                  network_features=None,
+                 sim_network_size=0,
                  use_gpu=False,
                  verbose=False):
 
@@ -55,6 +56,13 @@ class TorchLR:
             import networkx as nx
             G = nx.read_weighted_edgelist(network_file, delimiter='\t')
             self.laplacian = nx.laplacian_matrix(G)
+            # TODO: if this works it needs to be documented, but probably
+            # should think more about the right thing to do here
+            # for i in np.argwhere(~network_features).flatten():
+            for i in range(sim_network_size // 2, sim_network_size):
+                # hard-code for now, could be the max or average of
+                # the other degrees in the future
+                self.laplacian[i, i] = float((sim_network_size // 2) - 1)
         else:
             self.laplacian = None
 
@@ -87,8 +95,8 @@ class TorchLR:
             return indices, values, coo.shape
 
         indices, values, shape = _convert_csr_to_sparse_inputs(L)
-        L = torch.sparse.FloatTensor(indices, values, (20, 20))
-        penalty = torch.mm(w.view(1, -1), torch.sparse.mm(L, w.view(-1, 1)))
+        lt = torch.sparse.FloatTensor(indices, values, L.shape)
+        penalty = torch.mm(w.view(1, -1), torch.sparse.mm(lt, w.view(-1, 1)))
         return penalty.view(-1)
 
 

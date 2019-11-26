@@ -25,7 +25,12 @@ from tcga_util import (
     check_status
 )
 
+# TODO: remove once verified
+from tcga_util import train_model
+
 p = argparse.ArgumentParser()
+p.add_argument('--expression_file', default=cfg.rnaseq_train,
+               help='Path to expression dataset to use')
 p.add_argument('--gene_list', nargs='*', default=None,
                help='<Optional> Provide a list of genes to run\
                      mutation classification for; default is all genes')
@@ -35,6 +40,9 @@ p.add_argument('--results_dir',
                default=cfg.repo_root.joinpath('pytorch_results').resolve(),
                help='where to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
+p.add_argument('--sample_num_genes', type=int, default=-1,
+               help='If included, subsample this many samples\
+                     from the training data, uniformly at random')
 p.add_argument('--verbose', action='store_true')
 
 prms = p.add_argument_group('pytorch_params')
@@ -79,9 +87,9 @@ genes_df, pancan_data = du.load_raw_data(args.gene_list, verbose=args.verbose)
 
 # load our synthetic data
 logging.debug('Loading gene expression data...')
-rnaseq_train_df = pd.read_csv(cfg.data_dir.joinpath(
-                                  'tcga_train_sim_subset.tsv').resolve(),
-                              index_col=0, sep='\t')
+rnaseq_train_df = pd.read_csv(args.expression_file, index_col=0, sep='\t')
+num_network_nodes = len(rnaseq_train_df.columns)
+
 # scale synthetic data
 train_fitted_scaler = MinMaxScaler().fit(rnaseq_train_df)
 rnaseq_train_df = pd.DataFrame(
@@ -89,6 +97,9 @@ rnaseq_train_df = pd.DataFrame(
     columns=rnaseq_train_df.columns,
     index=rnaseq_train_df.index,
 )
+if args.sample_num_genes != -1:
+    rnaseq_train_df = rnaseq_train_df.sample(n=args.sample_num_genes,
+                                             random_state=args.seed)
 
 # track total metrics for each gene in one file
 metric_cols = [
@@ -144,7 +155,22 @@ for gene_idx, gene_series in genes_df.iterrows():
         if args.network_file is not None:
             torch_params['network_penalty'] = [args.network_penalty]
 
+    # cv_results = {
+    #     'torch_train_auroc': [],
+    #     'torch_train_aupr': [],
+    #     'torch_train_acc': [],
+    #     'torch_tune_auroc': [],
+    #     'torch_tune_aupr': [],
+    #     'torch_tune_acc': []
+    # }
+
     cv_results = {
+        'sklearn_train_auroc': [],
+        'sklearn_train_aupr': [],
+        'sklearn_train_acc': [],
+        'sklearn_tune_auroc': [],
+        'sklearn_tune_aupr': [],
+        'sklearn_tune_acc': [],
         'torch_train_auroc': [],
         'torch_train_aupr': [],
         'torch_train_acc': [],
@@ -165,6 +191,7 @@ for gene_idx, gene_series in genes_df.iterrows():
                           num_inner_folds=cfg.torch_num_inner_folds,
                           network_file=args.network_file,
                           network_features=gene_features,
+                          sim_network_size=num_network_nodes,
                           use_gpu=args.gpu,
                           verbose=args.verbose)
 
@@ -173,8 +200,27 @@ for gene_idx, gene_series in genes_df.iterrows():
                                                             y_train_df.status.values,
                                                             y_train_df.status.values)
     best_torch_params = torch_model.best_params
+    if hasattr(torch_model, 'results_df'):
+        torch_model.results_df.to_csv(os.path.join(args.results_dir,
+                                                   'torch_params_{}_{}.tsv'.format(
+                                                       signal, args.seed)), sep='\t')
+
+    # Find the best scikit-learn model
+    # TODO: remove
+    cv_pipeline, y_pred_train_df, y_pred_test_df, y_cv_df = train_model(
+        x_train=x_train_df,
+        x_test=x_train_df,
+        y_train=y_train_df,
+        alphas=cfg.alphas,
+        l1_ratios=cfg.l1_ratios,
+        n_folds=cfg.folds,
+        max_iter=cfg.max_iter,
+    )
 
     kf = KFold(n_splits=cfg.folds, shuffle=True, random_state=args.seed)
+
+    sklearn_coef_df = None
+    torch_coef_df = None
 
     # just evaluate on same train set (but different splits) for now
     # TODO: maybe this should be stratified eventually
@@ -208,6 +254,20 @@ for gene_idx, gene_series in genes_df.iterrows():
             y_tune, torch_pred_tune, drop=False
         )
 
+        # Make predictions using sklearn model
+        # TODO: remove
+        cv_pipeline.fit(X=X_subtrain, y=y_subtrain)
+        sklearn_pred_train = cv_pipeline.decision_function(X_subtrain)
+        sklearn_pred_tune = cv_pipeline.decision_function(X_tune)
+        sklearn_pred_bn_train = cv_pipeline.predict(X_subtrain)
+        sklearn_pred_bn_tune = cv_pipeline.predict(X_tune)
+        sklearn_train_results = get_threshold_metrics(
+            y_subtrain, sklearn_pred_train, drop=False
+        )
+        sklearn_tune_results = get_threshold_metrics(
+            y_tune, sklearn_pred_tune, drop=False
+        )
+
         cv_results['torch_train_auroc'].append(torch_train_results['auroc'])
         cv_results['torch_train_aupr'].append(torch_train_results['aupr'])
         cv_results['torch_tune_auroc'].append(torch_tune_results['auroc'])
@@ -219,18 +279,55 @@ for gene_idx, gene_series in genes_df.iterrows():
                 TorchLR.calculate_accuracy(y_tune,
                                            torch_pred_bn_tune.flatten()))
 
+        # TODO: remove
+        cv_results['sklearn_train_auroc'].append(sklearn_train_results['auroc'])
+        cv_results['sklearn_train_aupr'].append(sklearn_train_results['aupr'])
+        cv_results['sklearn_tune_auroc'].append(sklearn_tune_results['auroc'])
+        cv_results['sklearn_tune_aupr'].append(sklearn_tune_results['aupr'])
+        cv_results['sklearn_train_acc'].append(
+                TorchLR.calculate_accuracy(y_subtrain, sklearn_pred_bn_train))
+        cv_results['sklearn_tune_acc'].append(
+                TorchLR.calculate_accuracy(y_tune, sklearn_pred_bn_tune))
+
+        s_coef_df = extract_coefficients(
+            cv_pipeline=cv_pipeline,
+            feature_names=x_train_df.columns,
+            signal=signal,
+            z_dim=len(x_train_df.columns),
+            seed=args.seed,
+            algorithm=algorithm
+        )
+        s_coef_df['fold'] = fold
+
+        t_coef_df = s_coef_df.copy()
+        t_coef_df['weight'] = torch_weights
+
+        if sklearn_coef_df is None:
+            sklearn_coef_df = s_coef_df
+        else:
+            sklearn_coef_df = pd.concat((sklearn_coef_df, s_coef_df))
+
+        if torch_coef_df is None:
+            torch_coef_df = t_coef_df
+        else:
+            torch_coef_df = pd.concat((torch_coef_df, t_coef_df))
+
     cv_results_file = os.path.join(args.results_dir,
-                                   'cv_results_{}_l{}.pkl'.format(
-                                       args.seed, args.l1_penalty))
-    # torch_coef_file = os.path.join(args.results_dir,
-    #                                'torch_coefs_{}_l{}.tsv.gz'.format(
-    #                                    args.seed, args.l1_penalty))
+                                   'cv_results_{}_{}.pkl'.format(signal, args.seed))
+    torch_coef_file = os.path.join(args.results_dir,
+                                   'torch_coefs_{}_{}.tsv.gz'.format(signal, args.seed))
+    sklearn_coef_file = os.path.join(args.results_dir,
+                                     'sklearn_coefs_{}_{}.tsv.gz'.format(signal, args.seed))
 
     with open(cv_results_file, 'wb') as f:
         pkl.dump(cv_results, f)
 
-    # torch_coef_df.to_csv(torch_coef_file,
-    #                      sep='\t', index=False, compression='gzip',
-    #                      float_format="%.5g")
+    torch_coef_df.to_csv(torch_coef_file,
+                         sep='\t', index=False, compression='gzip',
+                         float_format="%.5g")
+
+    sklearn_coef_df.to_csv(sklearn_coef_file,
+                           sep='\t', index=False, compression='gzip',
+                           float_format="%.5g")
 
 
