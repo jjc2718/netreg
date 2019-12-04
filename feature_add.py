@@ -347,30 +347,18 @@ for gene_idx, gene_series in genes_df.iterrows():
             cv_results['sklearn_tune_acc'].append(
                     TorchLR.calculate_accuracy(y_tune, sklearn_pred_bn_tune))
 
-        if args.param_search:
-            cv_results_file = os.path.join(args.results_dir,
-                                           'cv_results_{}_{}_n{}.pkl'.format(
-                                               'random' if args.random else 'top',
-                                               args.seed, args.num_features))
-            torch_coef_file = os.path.join(args.results_dir,
-                                           'torch_coefs_{}_{}_n{}.tsv.gz'.format(
-                                               'random' if args.random else 'top',
-                                               args.seed, args.num_features))
-            sklearn_coef_file = os.path.join(args.results_dir,
-                                             'sklearn_coefs_{}_{}_n{}.tsv.gz'.format(
-                                               'random' if args.random else 'top',
-                                               args.seed, args.num_features))
-        else:
-            cv_results_file = os.path.join(args.results_dir,
-                                           'cv_results_{}_{}_l{}.pkl'.format(
-                                               signal, args.seed, args.l1_penalty))
-            torch_coef_file = os.path.join(args.results_dir,
-                                           'torch_coefs_{}_{}_l{}.tsv.gz'.format(
-                                               signal, args.seed, args.l1_penalty))
-            sklearn_coef_file = os.path.join(args.results_dir,
-                                             'sklearn_coefs_{}_{}_l{}.tsv.gz'.format(
-                                                 signal, args.seed, args.l1_penalty))
-
+        cv_results_file = os.path.join(args.results_dir,
+                                       'cv_results_{}_{}_n{}.pkl'.format(
+                                           'random' if args.random else 'top',
+                                           args.seed, args.num_features))
+        torch_coef_file = os.path.join(args.results_dir,
+                                       'torch_coefs_{}_{}_n{}.tsv.gz'.format(
+                                           'random' if args.random else 'top',
+                                           args.seed, args.num_features))
+        sklearn_coef_file = os.path.join(args.results_dir,
+                                         'sklearn_coefs_{}_{}_n{}.tsv.gz'.format(
+                                           'random' if args.random else 'top',
+                                           args.seed, args.num_features))
 
         with open(cv_results_file, 'wb') as f:
             pkl.dump(cv_results, f)
