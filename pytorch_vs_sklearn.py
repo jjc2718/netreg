@@ -204,7 +204,7 @@ for gene_idx, gene_series in genes_df.iterrows():
             x_test=x_test_df,
             y_train=y_train_df,
             alphas=cfg.alphas,
-            l1_ratios=cfg.l1_ratios,
+            l1_ratios=[0.0],
             n_folds=cfg.folds,
             max_iter=cfg.max_iter,
         )

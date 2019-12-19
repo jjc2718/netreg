@@ -90,10 +90,12 @@ if args.num_features > 0:
     else:
         # subset features by past regression coefficients
         coefs_file = os.path.join(cfg.repo_root,
-                                  'pytorch_results',
-                                  'sklearn_coefs_signal_42_l0.05.tsv.gz')
+                                  'coefs_no_l1',
+                                  'mutation',
+                                  'TP53',
+                                  'TP53_raw_coefficients.tsv.gz')
         coefs_df = pd.read_csv(coefs_file, sep='\t')
-        coefs_df = coefs_df[coefs_df['fold'] == 1]
+        # coefs_df = coefs_df[coefs_df['fold'] == 1]
         # get rid of non-gene features
         coefs_df['feature'] = pd.to_numeric(coefs_df['feature'], errors='coerce')
         coefs_df = coefs_df.dropna(subset=['feature'])
@@ -231,7 +233,7 @@ for gene_idx, gene_series in genes_df.iterrows():
             x_test=x_test_df,
             y_train=y_train_df,
             alphas=cfg.alphas,
-            l1_ratios=cfg.l1_ratios,
+            l1_ratios=[0.0],
             n_folds=cfg.folds,
             max_iter=cfg.max_iter,
         )

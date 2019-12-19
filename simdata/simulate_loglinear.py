@@ -11,7 +11,8 @@ def shuffle_same(X, y):
     return X[:, p], y[p]
 
 
-def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1, verbose=False):
+def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1,
+                verbose=False, unit_coefs=False):
     """Simulate data from a log-linear model.
 
     See, for instance: https://stats.stackexchange.com/a/46525
@@ -81,10 +82,13 @@ def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1, verbose=False):
 
     # shuffle data and is_correlated indicators in same order, so we know
     # which features are correlated/not correlated with outcome
-    X, is_correlated = shuffle_same(X, is_correlated)
+    # X, is_correlated = shuffle_same(X, is_correlated)
 
     # draw regression coefficients (betas) from N(0, 1)
-    B = np.random.randn(p_corr+1)
+    if unit_coefs:
+        B = np.ones((p_corr+1,))
+    else:
+        B = np.random.randn(p_corr+1)
 
     # calculate Bernoulli parameter pi(x_i) for each sample x_i
     linsum = B[0] + (X_corr @ B[1:, np.newaxis])

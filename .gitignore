@@ -6,3 +6,5 @@ compression_models/*
 output/*
 pytorch_results/*
 results/*
+simdata/sim_networks/*
+testing/*

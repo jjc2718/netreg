@@ -60,6 +60,6 @@ netreg_param_choices = {
     'learning_rate': [0.001, 0.0001, 5e-5, 1e-5],
     'batch_size': [20, 50, 100],
     'num_epochs': [50, 100, 200],
-    'l1_penalty': [0.01, 0.05, 0.1],
-    'network_penalty': [0.01, 0.05, 0.1, 1, 10]
+    'l1_penalty': [0.0],
+    'network_penalty': [10, 100, 1000]
 }

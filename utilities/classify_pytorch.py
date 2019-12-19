@@ -1,3 +1,4 @@
+import os
 import time
 import numpy as np
 import pandas as pd
@@ -34,6 +35,7 @@ class TorchLR:
                  num_inner_folds=4,
                  network_file=None,
                  network_features=None,
+                 correlated_features=None,
                  sim_network_size=0,
                  use_gpu=False,
                  verbose=False):
@@ -56,13 +58,19 @@ class TorchLR:
             import networkx as nx
             G = nx.read_weighted_edgelist(network_file, delimiter='\t')
             self.laplacian = nx.laplacian_matrix(G)
+            # import scipy.sparse
+            # self.laplacian = scipy.sparse.eye(sim_network_size,
+            #                                   format='csr')
             # TODO: if this works it needs to be documented, but probably
             # should think more about the right thing to do here
-            # for i in np.argwhere(~network_features).flatten():
-            for i in range(sim_network_size // 2, sim_network_size):
-                # hard-code for now, could be the max or average of
-                # the other degrees in the future
-                self.laplacian[i, i] = float((sim_network_size // 2) - 1)
+            # if 'random' not in os.path.split(network_file)[-1]:
+            #   for i in np.argwhere(correlated_features).flatten():
+            #        self.laplacian[i, i] = 1000
+            #    for i in np.argwhere(~correlated_features).flatten():
+                    # hard-code for now, could be the max or average of
+                    # the other degrees in the future
+                    # self.laplacian[i, i] = float((sim_network_size // 2) - 1)
+            #        self.laplacian[i, i] = 1000
         else:
             self.laplacian = None
 
@@ -97,7 +105,8 @@ class TorchLR:
         indices, values, shape = _convert_csr_to_sparse_inputs(L)
         lt = torch.sparse.FloatTensor(indices, values, L.shape)
         penalty = torch.mm(w.view(1, -1), torch.sparse.mm(lt, w.view(-1, 1)))
-        return penalty.view(-1)
+        return torch.autograd.Variable(penalty.view(-1).data[0],
+                                       requires_grad=True)
 
 
     @staticmethod
@@ -271,7 +280,8 @@ class TorchLR:
                     network_weights = network_weights[self.network_features]
                     network_loss = self._laplacian_penalty(self.laplacian,
                                                            network_weights)
-                    loss += network_penalty * float(network_loss)
+                    # loss = network_penalty * network_loss
+                    loss += network_penalty * network_loss
 
                 running_loss += loss
                 loss.backward()
