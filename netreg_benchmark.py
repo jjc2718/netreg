@@ -18,16 +18,26 @@ from sklearn.preprocessing import MinMaxScaler
 import config as cfg
 import utilities.data_utilities as du
 import simdata.simulate_loglinear as ll
+from simdata.simulate_networks import generate_and_save_network
 from utilities.classify_pytorch import TorchLR
-from tcga_util import get_threshold_metrics
+from tcga_util import (
+    train_model,
+    get_threshold_metrics,
+    extract_coefficients,
+    align_matrices,
+    check_status
+)
 
 p = argparse.ArgumentParser()
 p.add_argument('--gpu', action='store_true',
                help='If flag is included, run PyTorch models on GPU')
+p.add_argument('--num_samples', type=int, default=100)
+p.add_argument('--num_features', type=int, default=10)
 p.add_argument('--results_dir',
                default=cfg.repo_root.joinpath('pytorch_results').resolve(),
                help='where to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
+p.add_argument('--uncorr_frac', type=float, default=0.5)
 p.add_argument('--verbose', action='store_true')
 
 prms = p.add_argument_group('pytorch_params')
@@ -44,9 +54,8 @@ prms.add_argument('--param_search', action='store_true',
                         values in config.py and ignore provided parameters')
 
 net = p.add_argument_group('netreg_params')
-net.add_argument('--network_file', type=str, default=None,
-                 help='Path to network file (in edge list format), if\
-                       not included no network regularization is used')
+net.add_argument('--networks_dir', type=str,
+                 default=cfg.repo_root.joinpath('simdata/sim_networks').resolve())
 net.add_argument('--network_penalty', type=float, default=0,
                  help='Multiplier for network regularization term, defaults\
                        to 0 (no network penalty)')
@@ -69,44 +78,45 @@ if args.verbose:
 
 np.random.seed(args.seed)
 
-if args.param_search and (args.network_file is not None):
+if args.param_search:
     torch_params = cfg.netreg_param_choices
-elif args.param_search:
-    torch_params = cfg.torch_param_choices
 else:
     torch_params = {
         'batch_size': [args.batch_size],
         'l1_penalty': [args.l1_penalty],
         'learning_rate': [args.learning_rate],
-        'num_epochs': [args.num_epochs]
+        'num_epochs': [args.num_epochs],
+        'network_penalty': [args.network_penalty]
     }
-    if args.network_file is not None:
-        torch_params['network_penalty'] = [args.network_penalty]
 
 cv_results = {
+    'torch_train_auroc': [],
+    'torch_train_aupr': [],
+    'torch_train_acc': [],
+    'torch_test_auroc': [],
+    'torch_test_aupr': [],
+    'torch_test_acc': [],
     'r_train_auroc': [],
     'r_train_aupr': [],
     'r_train_acc': [],
     'r_test_auroc': [],
     'r_test_aupr': [],
     'r_test_acc': [],
-    'torch_train_auroc': [],
-    'torch_train_aupr': [],
-    'torch_train_acc': [],
-    'torch_test_auroc': [],
-    'torch_test_aupr': [],
-    'torch_test_acc': []
+    'sklearn_train_auroc': [],
+    'sklearn_train_aupr': [],
+    'sklearn_train_acc': [],
+    'sklearn_test_auroc': [],
+    'sklearn_test_aupr': [],
+    'sklearn_test_acc': []
 }
 
 # generate simulated data
-# TODO: these should be argparse arguments
-n = 100
-p = 10
-uncorr_frac = 0.5
 train_frac = 0.8
-X, y, _, is_correlated = ll.simulate_ll(n, p, uncorr_frac, seed=args.seed,
+X, y, _, is_correlated = ll.simulate_ll(args.num_samples, args.num_features,
+                                        args.uncorr_frac, seed=args.seed,
                                         verbose=args.verbose, unit_coefs=True)
-train_ixs = ll.split_train_test(n, train_frac, seed=args.seed, verbose=True)
+train_ixs = ll.split_train_test(args.num_samples, train_frac, seed=args.seed,
+                                verbose=True)
 X_train, X_test = X[train_ixs], X[~train_ixs]
 y_train, y_test = y[train_ixs], y[~train_ixs]
 
@@ -119,25 +129,43 @@ np.savetxt(train_data, X_train, fmt='%.5f', delimiter='\t')
 np.savetxt(test_data, X_test, fmt='%.5f', delimiter='\t')
 np.savetxt(train_labels, y_train, fmt='%i')
 np.savetxt(test_labels, y_test, fmt='%i')
-# TODO: make these a named tuple
-fnames = [
-    train_data.name,
-    test_data.name,
-    train_labels.name,
-    test_labels.name
-]
+Filenames = namedtuple('Filenames', ['train_data', 'test_data',
+                                     'train_labels', 'test_labels'])
+fnames = Filenames(
+    train_data=train_data.name,
+    test_data=test_data.name,
+    train_labels=train_labels.name,
+    test_labels=test_labels.name
+)
 train_data.close()
+
 test_data.close()
 train_labels.close()
 test_labels.close()
 
-# Fit torch model on training set, test on held out data
+# generate network for simulated data if it doesn't already exist
+if not os.path.exists(args.networks_dir):
+    os.path.makedirs(args.networks_dir)
+
+network_filename = os.path.join(args.networks_dir,
+                                'sim_p{}_uncorr{}.tsv'.format(
+                                    args.num_features,
+                                    args.uncorr_frac))
+
+if not os.path.exists(network_filename):
+    generate_and_save_network(is_correlated, network_filename)
+
+###########################################################
+# PYTORCH MODEL
+###########################################################
+
+# Fit PyTorch model on training set, test on held out data
 torch_model = TorchLR(torch_params,
                       seed=args.seed,
-                      network_file=args.network_file,
+                      network_file=network_filename,
                       use_gpu=args.gpu,
                       verbose=args.verbose,
-                      network_features=np.ones(p).astype('bool'),
+                      network_features=np.ones(args.num_features).astype('bool'),
                       correlated_features=is_correlated)
 
 losses, preds, preds_bn = torch_model.train_torch_model(X_train, X_test,
@@ -147,7 +175,9 @@ losses, preds, preds_bn = torch_model.train_torch_model(X_train, X_test,
 torch_weights = torch_model.last_weights.flatten()
 torch_pred_train, torch_pred_test = preds
 torch_pred_bn_train, torch_pred_bn_test = preds_bn
-# TODO: this can be a function
+
+# Calculate performance metrics
+# TODO: this could be a function
 torch_train_acc = TorchLR.calculate_accuracy(y_train,
                                              torch_pred_bn_train.flatten())
 torch_test_acc = TorchLR.calculate_accuracy(y_test,
@@ -170,16 +200,22 @@ cv_results['torch_test_acc'].append(
                                    torch_pred_bn_test.flatten()))
 best_torch_params = torch_model.best_params
 
-# Fit R netReg (TensorFlow) model on training set and
-# test on held out data
+###########################################################
+# R (netReg) MODEL
+###########################################################
+
+# Fit R model on training set an# test on held out data
 r_args = [
     'Rscript',
     os.path.join(cfg.scripts_dir, 'run_netreg.R'),
-    '--train_data', fnames[0],
-    '--test_data', fnames[1],
-    '--train_labels', fnames[2],
-    '--test_labels', fnames[3],
-    '--network_file', args.network_file,
+    '--train_data', fnames.train_data,
+    '--test_data', fnames.test_data,
+    '--train_labels', fnames.train_labels,
+    '--test_labels', fnames.test_labels,
+    '--network_file', network_filename,
+    '--num_samples', str(args.num_samples),
+    '--num_features', str(args.num_features),
+    '--uncorr_frac', str(args.uncorr_frac),
     '--results_dir', args.results_dir,
     '--seed', str(args.seed),
     '--l1_penalty', str(args.l1_penalty),
@@ -190,7 +226,7 @@ r_args = [
 if args.verbose:
     r_args.append('--verbose')
 
-logging.info('Running: {}'.format(' '.join(r_args)))
+logging.debug('Running: {}'.format(' '.join(r_args)))
 
 r_env = os.environ.copy()
 r_env['MKL_THREADING_LAYER'] = 'GNU'
@@ -202,17 +238,22 @@ for fname in fnames:
 
 r_pred_train = np.loadtxt(
     os.path.join(args.results_dir,
-                 'r_preds_train_{}.tsv'.format(args.seed)),
+                 'r_preds_train_n{}_p{}_u{}_s{}.tsv'.format(
+                     args.num_samples, args.num_features,
+                     args.uncorr_frac, args.seed)),
     delimiter='\t')
 r_pred_test = np.loadtxt(
     os.path.join(args.results_dir,
-                 'r_preds_test_{}.tsv'.format(args.seed)),
+                 'r_preds_test_n{}_p{}_u{}_s{}.tsv'.format(
+                     args.num_samples, args.num_features,
+                     args.uncorr_frac, args.seed)),
     delimiter='\t')
 
 # get binary predictions
 r_pred_bn_train = (r_pred_train > 0.5).astype('int')
 r_pred_bn_test = (r_pred_test > 0.5).astype('int')
 
+# Calculate performance metrics
 r_train_results = get_threshold_metrics(
     y_train, r_pred_train, drop=False
 )
@@ -231,19 +272,72 @@ cv_results['r_test_acc'].append(
         TorchLR.calculate_accuracy(y_test,
                                    r_pred_bn_test.flatten()))
 
+###########################################################
+# SCIKIT-LEARN MODEL (BASELINE)
+###########################################################
 
+y_train_sk = pd.DataFrame({'status': y_train})
+
+# Find the best scikit-learn model
+# maybe not a fair comparison since other models don't run CV
+cv_pipeline, y_pred_train_df, y_pred_test_df, y_cv_df = train_model(
+    x_train=X_train,
+    x_test=X_test,
+    y_train=y_train_sk,
+    alphas=cfg.alphas,
+    l1_ratios=[0.0],
+    n_folds=cfg.folds,
+    max_iter=cfg.max_iter,
+)
+
+cv_pipeline.fit(X=X_train, y=y_train)
+sklearn_pred_train = cv_pipeline.decision_function(X_train)
+sklearn_pred_test = cv_pipeline.decision_function(X_test)
+sklearn_pred_bn_train = cv_pipeline.predict(X_train)
+sklearn_pred_bn_test = cv_pipeline.predict(X_test)
+
+# Calculate performance metrics and extract model coefficients
+sklearn_train_results = get_threshold_metrics(
+    y_train, sklearn_pred_train, drop=False
+)
+sklearn_test_results = get_threshold_metrics(
+    y_test, sklearn_pred_test, drop=False
+)
+
+s_coef = cv_pipeline.best_estimator_.named_steps['classify'].coef_[0]
+
+cv_results['sklearn_train_auroc'].append(sklearn_train_results['auroc'])
+cv_results['sklearn_train_aupr'].append(sklearn_train_results['aupr'])
+cv_results['sklearn_test_auroc'].append(sklearn_test_results['auroc'])
+cv_results['sklearn_test_aupr'].append(sklearn_test_results['aupr'])
+cv_results['sklearn_train_acc'].append(
+        TorchLR.calculate_accuracy(y_train, sklearn_pred_bn_train))
+cv_results['sklearn_test_acc'].append(
+        TorchLR.calculate_accuracy(y_test, sklearn_pred_bn_test))
+
+# Save results to results directory
 if hasattr(torch_model, 'results_df'):
     torch_model.results_df.to_csv(os.path.join(args.results_dir,
                                                'torch_params_{}.tsv'.format(
                                                    args.seed)), sep='\t')
 
 cv_results_file = os.path.join(args.results_dir,
-                               'cv_results_{}.pkl'.format(args.seed))
+                               'cv_results_n{}_p{}_u{}_s{}.pkl'.format(
+                                   args.num_samples, args.num_features,
+                                   args.uncorr_frac, args.seed))
 torch_coef_file = os.path.join(args.results_dir,
-                               'torch_coefs_{}.tsv.gz'.format(args.seed))
+                               'torch_coefs_n{}_p{}_u{}_s{}.pkl'.format(
+                                   args.num_samples, args.num_features,
+                                   args.uncorr_frac, args.seed))
+sklearn_coef_file = os.path.join(args.results_dir,
+                                 'sklearn_coefs_n{}_p{}_u{}_s{}.pkl'.format(
+                                   args.num_samples, args.num_features,
+                                   args.uncorr_frac, args.seed))
 
+print(cv_results)
 with open(cv_results_file, 'wb') as f:
     pkl.dump(cv_results, f)
 
 np.savetxt(torch_coef_file, torch_weights, fmt='%.5f', delimiter='\t')
+np.savetxt(sklearn_coef_file, s_coef, fmt='%.5f', delimiter='\t')
 

@@ -257,8 +257,8 @@ class TorchLR:
         # pos_weight is a scalar, the weight for the 1 class
         criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                        optimizer, patience=5)
+        # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        #                 optimizer, patience=5)
 
         for epoch in range(num_epochs):
             running_loss = 0.0
@@ -280,14 +280,13 @@ class TorchLR:
                     network_weights = network_weights[self.network_features]
                     network_loss = self._laplacian_penalty(self.laplacian,
                                                            network_weights)
-                    # loss = network_penalty * network_loss
                     loss += network_penalty * network_loss
 
                 running_loss += loss
                 loss.backward()
                 optimizer.step()
 
-            scheduler.step(running_loss)
+            # scheduler.step(running_loss)
 
         if save_weights:
             if self.use_gpu:

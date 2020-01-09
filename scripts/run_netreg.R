@@ -32,16 +32,22 @@ run_netreg <- function(args) {
 
     # write predictions and coefficients to results_dir
     write.table(y_pred_train,
-                file=paste0(args$results_dir, '/r_preds_train_',
-                            args$seed, '.tsv'),
+                file=paste0(args$results_dir, '/r_preds_train_n',
+                            args$num_samples, '_p', args$num_features,
+                            '_u', args$uncorr_frac, '_s', args$seed,
+                            '.tsv'),
                 quote=F, sep='\t', row.names=F, col.names=F)
     write.table(y_pred_test,
-                file=paste0(args$results_dir, '/r_preds_test_',
-                            args$seed, '.tsv'),
+                file=paste0(args$results_dir, '/r_preds_test_n',
+                            args$num_samples, '_p', args$num_features,
+                            '_u', args$uncorr_frac, '_s', args$seed,
+                            '.tsv'),
                 quote=F, sep='\t', row.names=F, col.names=F)
     write.table(coef(fit),
-                file=paste0(args$results_dir, '/r_coefs_',
-                            args$seed, '.tsv'),
+                file=paste0(args$results_dir, '/r_coefs_n',
+                            args$num_samples, '_p', args$num_features,
+                            '_u', args$uncorr_frac, '_s', args$seed,
+                            '.tsv'),
                 quote=F, sep='\t', row.names=F, col.names=F)
 }
 
@@ -56,6 +62,9 @@ main <- function() {
 
     # input parameters
     parser$add_argument('--network_file', required=T)
+    parser$add_argument('--num_samples', required=T)
+    parser$add_argument('--num_features', required=T)
+    parser$add_argument('--uncorr_frac', required=T)
     parser$add_argument('--results_dir', required=T)
     parser$add_argument('--seed', type='integer', required=T)
     parser$add_argument('--verbose', action='store_true')
