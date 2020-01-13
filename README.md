@@ -1,8 +1,8 @@
 # netscape
 
-Evaluating the **net**work/pathway regularization land**scape** for gene expression data
+Exploring the **net**work/pathway regularization land**scape** for gene expression data
 
-Overall goal of this project: explore network regularized methods for
+Overall goal of this project: evaluate network regularized methods for
 a variety of practical problems using a variety of biological networks.
 
 At present, this repo contains an adaptation of the pipeline used in
