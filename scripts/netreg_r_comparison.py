@@ -5,18 +5,19 @@ import sys; sys.path.append('.')
 import config as cfg
 
 # just hardcoding PyTorch/R parameters for now
-batch_size = 50
+batch_size = 30
 learning_rate = 0.001
-num_epochs = 200
+num_epochs = 500
 l1_penalty = 0
-network_penalty = 1
+network_penalty = 10
 
 networks_dir = os.path.join(cfg.repo_root, 'simdata', 'sim_networks')
-results_dir = os.path.join(cfg.repo_root, 'simdata', 'r_test_results')
+results_dir = os.path.join(cfg.repo_root, 'simdata', 'clique_results')
 # results_dir = os.path.join(cfg.repo_root, 'simdata', 'r_test_results', 'no_network')
 
 def run_benchmark_script(n, p, uncorr_frac, seed):
 
+    num_networks = (p // 5) + 1
     script_args = [
         'python',
         os.path.join(cfg.repo_root, 'netreg_benchmark.py'),
@@ -30,6 +31,7 @@ def run_benchmark_script(n, p, uncorr_frac, seed):
         '--num_samples', str(n),
         '--num_features', str(p),
         '--uncorr_frac', str(uncorr_frac),
+        '--num_networks', str(num_networks),
         '--seed', str(seed),
         '--verbose'
     ]

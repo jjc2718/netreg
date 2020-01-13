@@ -289,10 +289,15 @@ class TorchLR:
             # scheduler.step(running_loss)
 
         if save_weights:
+            # bias goes first, then weights in order
             if self.use_gpu:
-                self.last_weights = model.linear.weight.data.cpu().numpy()
+                bias = model.linear.bias.data.cpu().numpy()
+                weights = model.linear.weight.data.cpu().numpy().flatten()
+                self.last_weights = np.concatenate((bias, weights))
             else:
-                self.last_weights = model.linear.weight.data.numpy()
+                bias = model.linear.bias.data.numpy()
+                weights = model.linear.weight.data.numpy().flatten()
+                self.last_weights = np.concatenate((bias, weights))
 
         y_pred_train = model(X_tr)
         y_pred_test = model(X_ts)

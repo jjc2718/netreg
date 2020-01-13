@@ -18,7 +18,7 @@ from sklearn.preprocessing import MinMaxScaler
 import config as cfg
 import utilities.data_utilities as du
 import simdata.simulate_loglinear as ll
-from simdata.simulate_networks import generate_and_save_network
+import simdata.simulate_networks as snet
 from utilities.classify_pytorch import TorchLR
 from tcga_util import (
     train_model,
@@ -38,6 +38,7 @@ p.add_argument('--results_dir',
                help='where to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
 p.add_argument('--uncorr_frac', type=float, default=0.5)
+p.add_argument('--num_networks', type=int, default=2)
 p.add_argument('--verbose', action='store_true')
 
 prms = p.add_argument_group('pytorch_params')
@@ -112,9 +113,11 @@ cv_results = {
 
 # generate simulated data
 train_frac = 0.8
-X, y, _, is_correlated = ll.simulate_ll(args.num_samples, args.num_features,
-                                        args.uncorr_frac, seed=args.seed,
-                                        verbose=args.verbose, unit_coefs=True)
+
+X, betas, y, is_correlated, adj_matrix, network_groups = snet.simulate_network(
+        args.num_samples, args.num_features, args.uncorr_frac,
+        args.num_networks, seed=args.seed, verbose=args.verbose)
+
 train_ixs = ll.split_train_test(args.num_samples, train_frac, seed=args.seed,
                                 verbose=True)
 X_train, X_test = X[train_ixs], X[~train_ixs]
@@ -148,12 +151,14 @@ if not os.path.exists(args.networks_dir):
     os.path.makedirs(args.networks_dir)
 
 network_filename = os.path.join(args.networks_dir,
-                                'sim_p{}_uncorr{}.tsv'.format(
+                                'sim_groups_p{}_u{}_s{}.tsv'.format(
                                     args.num_features,
-                                    args.uncorr_frac))
+                                    args.uncorr_frac,
+                                    args.seed))
 
 if not os.path.exists(network_filename):
-    generate_and_save_network(is_correlated, network_filename)
+    snet.save_numpy_to_el(adj_matrix, np.arange(args.num_samples),
+                          network_filename)
 
 ###########################################################
 # PYTORCH MODEL
@@ -238,13 +243,13 @@ for fname in fnames:
 
 r_pred_train = np.loadtxt(
     os.path.join(args.results_dir,
-                 'r_preds_train_n{}_p{}_u{}_s{}.tsv'.format(
+                 'r_preds_train_n{}_p{}_u{}_s{}.txt'.format(
                      args.num_samples, args.num_features,
                      args.uncorr_frac, args.seed)),
     delimiter='\t')
 r_pred_test = np.loadtxt(
     os.path.join(args.results_dir,
-                 'r_preds_test_n{}_p{}_u{}_s{}.tsv'.format(
+                 'r_preds_test_n{}_p{}_u{}_s{}.txt'.format(
                      args.num_samples, args.num_features,
                      args.uncorr_frac, args.seed)),
     delimiter='\t')
@@ -284,7 +289,7 @@ cv_pipeline, y_pred_train_df, y_pred_test_df, y_cv_df = train_model(
     x_train=X_train,
     x_test=X_test,
     y_train=y_train_sk,
-    alphas=cfg.alphas,
+    alphas=[0.0],
     l1_ratios=[0.0],
     n_folds=cfg.folds,
     max_iter=cfg.max_iter,
@@ -304,7 +309,9 @@ sklearn_test_results = get_threshold_metrics(
     y_test, sklearn_pred_test, drop=False
 )
 
-s_coef = cv_pipeline.best_estimator_.named_steps['classify'].coef_[0]
+s_coef = np.concatenate((
+    cv_pipeline.best_estimator_.named_steps['classify'].intercept_,
+    cv_pipeline.best_estimator_.named_steps['classify'].coef_[0]))
 
 cv_results['sklearn_train_auroc'].append(sklearn_train_results['auroc'])
 cv_results['sklearn_train_aupr'].append(sklearn_train_results['aupr'])
@@ -325,12 +332,16 @@ cv_results_file = os.path.join(args.results_dir,
                                'cv_results_n{}_p{}_u{}_s{}.pkl'.format(
                                    args.num_samples, args.num_features,
                                    args.uncorr_frac, args.seed))
+true_coef_file = os.path.join(args.results_dir,
+                              'true_coefs_n{}_p{}_u{}_s{}.txt'.format(
+                                  args.num_samples, args.num_features,
+                                  args.uncorr_frac, args.seed))
 torch_coef_file = os.path.join(args.results_dir,
-                               'torch_coefs_n{}_p{}_u{}_s{}.pkl'.format(
+                               'torch_coefs_n{}_p{}_u{}_s{}.txt'.format(
                                    args.num_samples, args.num_features,
                                    args.uncorr_frac, args.seed))
 sklearn_coef_file = os.path.join(args.results_dir,
-                                 'sklearn_coefs_n{}_p{}_u{}_s{}.pkl'.format(
+                                 'sklearn_coefs_n{}_p{}_u{}_s{}.txt'.format(
                                    args.num_samples, args.num_features,
                                    args.uncorr_frac, args.seed))
 
@@ -338,6 +349,7 @@ print(cv_results)
 with open(cv_results_file, 'wb') as f:
     pkl.dump(cv_results, f)
 
+np.savetxt(true_coef_file, betas, fmt='%.5f', delimiter='\t')
 np.savetxt(torch_coef_file, torch_weights, fmt='%.5f', delimiter='\t')
 np.savetxt(sklearn_coef_file, s_coef, fmt='%.5f', delimiter='\t')
 
