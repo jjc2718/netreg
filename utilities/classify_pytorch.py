@@ -280,7 +280,8 @@ class TorchLR:
                     network_weights = network_weights[self.network_features]
                     network_loss = self._laplacian_penalty(self.laplacian,
                                                            network_weights)
-                    loss += network_penalty * network_loss
+                    # loss += network_penalty * network_loss
+                    loss = network_penalty * network_loss
 
                 running_loss += loss
                 loss.backward()

@@ -26,7 +26,7 @@ num_features_raw = 8000
 filter_prop = 0.05
 filter_count = 15
 folds = 3
-max_iter = 100
+max_iter = 200
 alphas = [0.1, 0.13, 0.15, 0.2, 0.25, 0.3]
 l1_ratios = [0.15, 0.16, 0.2, 0.25, 0.3, 0.4]
 
