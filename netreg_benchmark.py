@@ -31,14 +31,17 @@ from tcga_util import (
 p = argparse.ArgumentParser()
 p.add_argument('--gpu', action='store_true',
                help='If flag is included, run PyTorch models on GPU')
-p.add_argument('--num_samples', type=int, default=100)
 p.add_argument('--num_features', type=int, default=10)
+p.add_argument('--num_networks', type=int, default=2)
+p.add_argument('--num_samples', type=int, default=100)
+p.add_argument('--plot_learning_curves', default=None,
+               help='If flag is included, plot learning curves and save\
+                     them to this directory')
 p.add_argument('--results_dir',
                default=cfg.repo_root.joinpath('pytorch_results').resolve(),
-               help='where to write results to')
+               help='Directory to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
 p.add_argument('--uncorr_frac', type=float, default=0.5)
-p.add_argument('--num_networks', type=int, default=2)
 p.add_argument('--verbose', action='store_true')
 
 prms = p.add_argument_group('pytorch_params')
@@ -75,7 +78,12 @@ if (not args.param_search) and (None in [args.batch_size,
              ' or manually pass a single value for all parameters')
 
 if args.verbose:
-    logging.basicConfig(level=logging.DEBUG, format='%(message)s')
+    logger = logging.getLogger('netreg_benchmark')
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
 np.random.seed(args.seed)
 
@@ -146,9 +154,17 @@ test_data.close()
 train_labels.close()
 test_labels.close()
 
+# make directory for learning curve if included
+if args.plot_learning_curves is not None:
+    learning_curves = True
+    if not os.path.exists(args.plot_learning_curves):
+        os.makedirs(args.plot_learning_curves)
+else:
+    learning_curves = False
+
 # generate network for simulated data if it doesn't already exist
 if not os.path.exists(args.networks_dir):
-    os.path.makedirs(args.networks_dir)
+    os.makedirs(args.networks_dir)
 
 network_filename = os.path.join(args.networks_dir,
                                 'sim_groups_p{}_u{}_s{}.tsv'.format(
@@ -168,10 +184,10 @@ if not os.path.exists(network_filename):
 torch_model = TorchLR(torch_params,
                       seed=args.seed,
                       network_file=network_filename,
-                      use_gpu=args.gpu,
-                      verbose=args.verbose,
                       network_features=np.ones(args.num_features).astype('bool'),
-                      correlated_features=is_correlated)
+                      learning_curves=learning_curves,
+                      use_gpu=args.gpu,
+                      verbose=args.verbose)
 
 losses, preds, preds_bn = torch_model.train_torch_model(X_train, X_test,
                                                         y_train, y_test,
@@ -205,6 +221,22 @@ cv_results['torch_test_acc'].append(
                                    torch_pred_bn_test.flatten()))
 best_torch_params = torch_model.best_params
 
+# TODO: remove, testing learning curve functionality
+# import matplotlib; matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set()
+for metric in torch_model.monitor_.keys():
+    num_epochs = len(torch_model.monitor_[metric])
+    plt.plot(np.arange(1, num_epochs+1), torch_model.monitor_[metric], label=metric)
+plt.xlabel('Epoch')
+plt.ylabel('Metric')
+plt.legend()
+plt.savefig(os.path.join(args.plot_learning_curves,
+                         'lc_n{}_p{}_u{}_s{}.pdf'.format(
+                           args.num_samples, args.num_features,
+                           args.uncorr_frac, args.seed)))
+
 ###########################################################
 # R (netReg) MODEL
 ###########################################################
@@ -231,7 +263,7 @@ r_args = [
 if args.verbose:
     r_args.append('--verbose')
 
-logging.debug('Running: {}'.format(' '.join(r_args)))
+logger.info('Running: {}'.format(' '.join(r_args)))
 
 r_env = os.environ.copy()
 r_env['MKL_THREADING_LAYER'] = 'GNU'
@@ -345,7 +377,6 @@ sklearn_coef_file = os.path.join(args.results_dir,
                                    args.num_samples, args.num_features,
                                    args.uncorr_frac, args.seed))
 
-print(cv_results)
 with open(cv_results_file, 'wb') as f:
     pkl.dump(cv_results, f)
 

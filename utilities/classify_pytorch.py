@@ -35,8 +35,7 @@ class TorchLR:
                  num_inner_folds=4,
                  network_file=None,
                  network_features=None,
-                 correlated_features=None,
-                 sim_network_size=0,
+                 learning_curves=False,
                  use_gpu=False,
                  verbose=False):
 
@@ -57,22 +56,20 @@ class TorchLR:
             self.network_features = network_features
             import networkx as nx
             G = nx.read_weighted_edgelist(network_file, delimiter='\t')
-            self.laplacian = nx.laplacian_matrix(G)
-            # import scipy.sparse
-            # self.laplacian = scipy.sparse.eye(sim_network_size,
-            #                                   format='csr')
-            # TODO: if this works it needs to be documented, but probably
-            # should think more about the right thing to do here
-            # if 'random' not in os.path.split(network_file)[-1]:
-            #   for i in np.argwhere(correlated_features).flatten():
-            #        self.laplacian[i, i] = 1000
-            #    for i in np.argwhere(~correlated_features).flatten():
-                    # hard-code for now, could be the max or average of
-                    # the other degrees in the future
-                    # self.laplacian[i, i] = float((sim_network_size // 2) - 1)
-            #        self.laplacian[i, i] = 1000
+            # TODO: this should probably be stored as a sparse matrix
+            lt = nx.laplacian_matrix(G)
+            indices, values, shape = self._convert_csr_to_sparse_inputs(lt)
+            self.laplacian = torch.sparse.FloatTensor(indices, values, shape)
         else:
             self.laplacian = None
+
+        # dict for monitoring quantities of interest (e.g. loss over epochs)
+        self.monitor_ = {
+            'train_loss': [],
+            'test_loss': [],
+            'l1_loss': [],
+            'network_loss': []
+        }
 
         max_params_length = max(len(vs) for k, vs in params_map.items())
         # if there's only one choice provided for each hyperparameter,
@@ -86,27 +83,17 @@ class TorchLR:
         self.params_map = params_map
         self.num_inner_folds = num_inner_folds
         self.use_gpu = use_gpu
+        self.learning_curves = learning_curves
         self.verbose = verbose
 
 
-    def _laplacian_penalty(self, L, w):
-        """Calculate w^{T}Lw for weights w and graph Laplacian L.
-
-        Assumes L is a CSR-formatted sparse matrix and w is a 1D tensor.
-        """
-        def _convert_csr_to_sparse_inputs(X):
-            # from code at https://github.com/suinleelab/attributionpriors
-            import scipy.sparse as sp
-            coo = sp.coo_matrix(X)
-            indices = torch.LongTensor(np.mat([coo.row, coo.col]))
-            values = torch.FloatTensor(coo.data)
-            return indices, values, coo.shape
-
-        indices, values, shape = _convert_csr_to_sparse_inputs(L)
-        lt = torch.sparse.FloatTensor(indices, values, L.shape)
-        penalty = torch.mm(w.view(1, -1), torch.sparse.mm(lt, w.view(-1, 1)))
-        return torch.autograd.Variable(penalty.view(-1).data[0],
-                                       requires_grad=True)
+    def _convert_csr_to_sparse_inputs(self, X):
+        # adapted from code at https://github.com/suinleelab/attributionpriors
+        import scipy.sparse as sp
+        coo = sp.coo_matrix(X)
+        indices = torch.LongTensor(np.mat([coo.row, coo.col]))
+        values = torch.FloatTensor(coo.data)
+        return indices, values, coo.shape
 
 
     @staticmethod
@@ -175,13 +162,14 @@ class TorchLR:
 
         losses, preds, preds_bn = self.torch_model(X_train, X_test, y_train, y_test,
                                                    best_params,
-                                                   save_weights=save_weights)
+                                                   save_weights=save_weights,
+                                                   learning_curves=self.learning_curves)
 
         return losses, preds, preds_bn
 
 
     def torch_model(self, X_train, X_test, y_train, y_test, params,
-                    save_weights=False):
+                    save_weights=False, learning_curves=False):
 
         """Main function for training PyTorch model.
 
@@ -268,6 +256,13 @@ class TorchLR:
                 loss = criterion(y_pred, y_batch)
 
                 # add l1 loss
+                # print([param for name, param in model.named_parameters()
+                #              if 'bias' not in name][0])
+                # weights = torch.Tensor(
+                #         [param for name, param in model.named_parameters()
+                #         if 'bias' not in name])
+                # print(weights)
+
                 l1_loss = sum(torch.norm(param, 1)
                                 for name, param in model.named_parameters()
                                 if 'bias' not in name)
@@ -275,17 +270,46 @@ class TorchLR:
 
                 # add network penalty if applicable
                 if self.laplacian is not None:
-                    # only penalize features that are in the network
-                    network_weights = model.linear.weight.data.reshape(-1)
-                    network_weights = network_weights[self.network_features]
-                    network_loss = self._laplacian_penalty(self.laplacian,
-                                                           network_weights)
-                    # loss += network_penalty * network_loss
-                    loss = network_penalty * network_loss
+                    w = [param for name, param in model.named_parameters()
+                               if 'bias' not in name][0]
+                    # filter for features that are in the network
+                    w = w[:, self.network_features]
+                    network_loss = torch.mm(
+                        w.view(1, -1),
+                        torch.sparse.mm(self.laplacian, w.view(-1, 1)))
+                    loss += (network_penalty * network_loss).view(-1)[0]
 
                 running_loss += loss
                 loss.backward()
                 optimizer.step()
+
+            if learning_curves:
+                # save train loss and test loss on whole dataset after each epoch
+                y_pred_train = model(X_tr)
+                y_pred_test = model(X_ts)
+                self.monitor_['train_loss'].append(float((
+                    criterion(y_pred_train, y_tr)
+                ).detach()))
+                self.monitor_['test_loss'].append(float((
+                    criterion(y_pred_test, y_ts)
+                ).detach()))
+                # also save l1 loss
+                self.monitor_['l1_loss'].append(float((
+                    sum(torch.norm(param, 1)
+                            for name, param in model.named_parameters()
+                            if 'bias' not in name)
+                ).detach()))
+                # also save network loss
+                network_weights = [param for name, param in model.named_parameters()
+                                         if 'bias' not in name][0]
+                network_weights = network_weights[:, self.network_features]
+                network_loss = torch.mm(
+                    w.view(1, -1),
+                    torch.sparse.mm(self.laplacian, w.view(-1, 1)))
+                self.monitor_['network_loss'].append(float((
+                    (network_loss).view(-1)[0]
+                ).detach()))
+                network_weights = model.linear.weight.data.reshape(-1)
 
             # scheduler.step(running_loss)
 
