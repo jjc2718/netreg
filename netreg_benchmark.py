@@ -221,21 +221,22 @@ cv_results['torch_test_acc'].append(
                                    torch_pred_bn_test.flatten()))
 best_torch_params = torch_model.best_params
 
-# TODO: remove, testing learning curve functionality
+# TODO: move to function somewhere, for learning curve functionality
 # import matplotlib; matplotlib.use('Agg')
-import matplotlib.pyplot as plt
-import seaborn as sns
-sns.set()
-for metric in torch_model.monitor_.keys():
-    num_epochs = len(torch_model.monitor_[metric])
-    plt.plot(np.arange(1, num_epochs+1), torch_model.monitor_[metric], label=metric)
-plt.xlabel('Epoch')
-plt.ylabel('Metric')
-plt.legend()
-plt.savefig(os.path.join(args.plot_learning_curves,
-                         'lc_n{}_p{}_u{}_s{}.pdf'.format(
-                           args.num_samples, args.num_features,
-                           args.uncorr_frac, args.seed)))
+if args.plot_learning_curves is not None:
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    sns.set()
+    for metric in torch_model.monitor_.keys():
+        num_epochs = len(torch_model.monitor_[metric])
+        plt.plot(np.arange(1, num_epochs+1), torch_model.monitor_[metric], label=metric)
+    plt.xlabel('Epoch')
+    plt.ylabel('Metric')
+    plt.legend()
+    plt.savefig(os.path.join(args.plot_learning_curves,
+                             'lc_n{}_p{}_u{}_s{}.pdf'.format(
+                               args.num_samples, args.num_features,
+                               args.uncorr_frac, args.seed)))
 
 ###########################################################
 # R (netReg) MODEL

@@ -6,14 +6,13 @@ import config as cfg
 
 # just hardcoding PyTorch/R parameters for now
 batch_size = 30
-learning_rate = 0.001
+learning_rate = 0.003
 num_epochs = 500
 l1_penalty = 0
-network_penalty = 10
+network_penalty = 0.1
 
 networks_dir = os.path.join(cfg.repo_root, 'simdata', 'sim_networks')
-results_dir = os.path.join(cfg.repo_root, 'simdata', 'only_network_penalty')
-# results_dir = os.path.join(cfg.repo_root, 'simdata', 'r_test_results', 'no_network')
+results_dir = os.path.join(cfg.repo_root, 'simdata', 'clique_results')
 
 def run_benchmark_script(n, p, uncorr_frac, seed):
 
