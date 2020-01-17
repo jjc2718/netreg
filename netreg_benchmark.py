@@ -102,10 +102,10 @@ else:
 
 cv_results = {
     # TODO: could calculate R^2 for regression fit?
-    # 'torch_train_mse': [],
-    # 'torch_train_rmse': [],
-    # 'torch_test_mse': [],
-    # 'torch_test_rmse': [],
+    'torch_train_mse': [],
+    'torch_train_rmse': [],
+    'torch_test_mse': [],
+    'torch_test_rmse': [],
     'r_train_mse': [],
     'r_train_rmse': [],
     'r_test_mse': [],
@@ -165,8 +165,9 @@ if not os.path.exists(args.networks_dir):
     os.makedirs(args.networks_dir)
 
 network_filename = os.path.join(args.networks_dir,
-                                'sim_groups_p{}_u{}_s{}.tsv'.format(
+                                'sim_groups_p{}_e{}_u{}_s{}.tsv'.format(
                                     args.num_features,
+                                    args.noise_stdev,
                                     args.uncorr_frac,
                                     args.seed))
 
@@ -178,7 +179,7 @@ if not os.path.exists(network_filename):
 # PYTORCH MODEL
 ###########################################################
 
-"""
+logger.info('Running PyTorch model...')
 
 # Fit PyTorch model on training set, test on held out data
 torch_model = TorchLR(torch_params,
@@ -199,26 +200,16 @@ torch_pred_bn_train, torch_pred_bn_test = preds_bn
 
 # Calculate performance metrics
 # TODO: this could be a function
-torch_train_acc = TorchLR.calculate_accuracy(y_train,
-                                             torch_pred_bn_train.flatten())
-torch_test_acc = TorchLR.calculate_accuracy(y_test,
-                                            torch_pred_bn_test.flatten())
-torch_train_results = get_threshold_metrics(
-        y_train, torch_pred_train, drop=False
-)
-torch_test_results = get_threshold_metrics(
-    y_test, torch_pred_test, drop=False
-)
-cv_results['torch_train_auroc'].append(torch_train_results['auroc'])
-cv_results['torch_train_aupr'].append(torch_train_results['aupr'])
-cv_results['torch_test_auroc'].append(torch_test_results['auroc'])
-cv_results['torch_test_aupr'].append(torch_test_results['aupr'])
-cv_results['torch_train_acc'].append(
-        TorchLR.calculate_accuracy(y_train,
-                                   torch_pred_bn_train.flatten()))
-cv_results['torch_test_acc'].append(
-        TorchLR.calculate_accuracy(y_test,
-                                   torch_pred_bn_test.flatten()))
+torch_train_mse = mean_squared_error(y_train, torch_pred_train)
+torch_train_rmse = np.sqrt(torch_train_mse)
+torch_test_mse = mean_squared_error(y_test, torch_pred_test)
+torch_test_rmse = np.sqrt(torch_test_mse)
+
+cv_results['torch_train_mse'].append(torch_train_mse)
+cv_results['torch_train_rmse'].append(torch_train_rmse)
+cv_results['torch_test_mse'].append(torch_test_mse)
+cv_results['torch_test_rmse'].append(torch_test_rmse)
+
 best_torch_params = torch_model.best_params
 
 # TODO: move to function somewhere, for learning curve functionality
@@ -234,11 +225,10 @@ if args.plot_learning_curves is not None:
     plt.ylabel('Metric')
     plt.legend()
     plt.savefig(os.path.join(args.plot_learning_curves,
-                             'lc_n{}_p{}_u{}_s{}.pdf'.format(
+                             'lc_n{}_p{}_e{}_u{}_s{}.pdf'.format(
                                args.num_samples, args.num_features,
-                               args.uncorr_frac, args.seed)))
-
-"""
+                               args.noise_stdev, args.uncorr_frac,
+                               args.seed)))
 
 ###########################################################
 # R (netReg) MODEL
@@ -255,6 +245,7 @@ r_args = [
     '--network_file', network_filename,
     '--num_samples', str(args.num_samples),
     '--num_features', str(args.num_features),
+    '--noise_stdev', str(args.noise_stdev),
     '--uncorr_frac', str(args.uncorr_frac),
     '--results_dir', args.results_dir,
     '--seed', str(args.seed),
@@ -279,15 +270,17 @@ for fname in fnames:
 
 r_pred_train = np.loadtxt(
     os.path.join(args.results_dir,
-                 'r_preds_train_n{}_p{}_u{}_s{}.txt'.format(
+                 'r_preds_train_n{}_p{}_e{}_u{}_s{}.txt'.format(
                      args.num_samples, args.num_features,
-                     args.uncorr_frac, args.seed)),
+                     args.noise_stdev, args.uncorr_frac,
+                     args.seed)),
     delimiter='\t')
 r_pred_test = np.loadtxt(
     os.path.join(args.results_dir,
-                 'r_preds_test_n{}_p{}_u{}_s{}.txt'.format(
+                 'r_preds_test_n{}_p{}_e{}_u{}_s{}.txt'.format(
                      args.num_samples, args.num_features,
-                     args.uncorr_frac, args.seed)),
+                     args.noise_stdev, args.uncorr_frac,
+                     args.seed)),
     delimiter='\t')
 
 
@@ -311,7 +304,7 @@ cv_results['r_test_rmse'].append(r_test_rmse)
 # SCIKIT-LEARN MODEL (BASELINE)
 ###########################################################
 
-logger.info('Running scikit-learn SGD model (no network penalty)')
+logger.info('Running scikit-learn SGD model (no network penalty)...')
 
 from sklearn.linear_model import SGDRegressor
 
@@ -338,36 +331,36 @@ cv_results['sklearn_test_mse'].append(sklearn_test_mse)
 cv_results['sklearn_test_rmse'].append(sklearn_test_rmse)
 
 # Save results to results directory
-'''
 if hasattr(torch_model, 'results_df'):
     torch_model.results_df.to_csv(os.path.join(args.results_dir,
                                                'torch_params_{}.tsv'.format(
                                                    args.seed)), sep='\t')
-'''
 
 cv_results_file = os.path.join(args.results_dir,
-                               'cv_results_n{}_p{}_u{}_s{}.pkl'.format(
+                               'cv_results_n{}_p{}_e{}_u{}_s{}.pkl'.format(
                                    args.num_samples, args.num_features,
-                                   args.uncorr_frac, args.seed))
+                                   args.noise_stdev, args.uncorr_frac,
+                                   args.seed))
 true_coef_file = os.path.join(args.results_dir,
-                              'true_coefs_n{}_p{}_u{}_s{}.txt'.format(
+                              'true_coefs_n{}_p{}_e{}_u{}_s{}.txt'.format(
                                   args.num_samples, args.num_features,
-                                  args.uncorr_frac, args.seed))
-'''
+                                  args.noise_stdev, args.uncorr_frac,
+                                  args.seed))
 torch_coef_file = os.path.join(args.results_dir,
-                               'torch_coefs_n{}_p{}_u{}_s{}.txt'.format(
+                               'torch_coefs_n{}_p{}_e{}_u{}_s{}.txt'.format(
                                    args.num_samples, args.num_features,
-                                   args.uncorr_frac, args.seed))
-'''
+                                   args.noise_stdev, args.uncorr_frac,
+                                   args.seed))
 sklearn_coef_file = os.path.join(args.results_dir,
-                                 'sklearn_coefs_n{}_p{}_u{}_s{}.txt'.format(
+                                 'sklearn_coefs_n{}_p{}_e{}_u{}_s{}.txt'.format(
                                    args.num_samples, args.num_features,
-                                   args.uncorr_frac, args.seed))
+                                   args.noise_stdev, args.uncorr_frac,
+                                   args.seed))
 
 with open(cv_results_file, 'wb') as f:
     pkl.dump(cv_results, f)
 
 np.savetxt(true_coef_file, betas, fmt='%.5f', delimiter='\t')
-# np.savetxt(torch_coef_file, torch_weights, fmt='%.5f', delimiter='\t')
+np.savetxt(torch_coef_file, torch_weights, fmt='%.5f', delimiter='\t')
 np.savetxt(sklearn_coef_file, s_coef, fmt='%.5f', delimiter='\t')
 

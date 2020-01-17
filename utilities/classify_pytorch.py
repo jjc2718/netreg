@@ -200,6 +200,9 @@ class TorchLR:
              (predictions on training data, predictions on testing data),
              (binarized predictions on training/test data))
         """
+        # TODO: make this a class option
+        classify = False
+
         if self.verbose:
             t = time.time()
 
@@ -216,34 +219,41 @@ class TorchLR:
         #
         # TODO: could add a function argument to turn this on/off (but in
         # general it seems to give slightly better results)
-        train_count = np.bincount(y_train)
-        pos_weight = train_count[0] / train_count[1]
-        if self.verbose:
-            print('\n[0, 1]: {} (pos_weight={:.4f})'.format(train_count, pos_weight))
+        if classify:
+            train_count = np.bincount(y_train)
+            pos_weight = train_count[0] / train_count[1]
+            if self.verbose:
+                print('\n[0, 1]: {} (pos_weight={:.4f})'.format(train_count, pos_weight))
 
         if self.use_gpu:
             X_tr = torch.stack([torch.Tensor(x) for x in X_train]).cuda()
             X_ts = torch.stack([torch.Tensor(x) for x in X_test]).cuda()
             y_tr = torch.Tensor(y_train).view(-1, 1).cuda()
             y_ts = torch.Tensor(y_test).view(-1, 1).cuda()
-            pos_weight = torch.Tensor([pos_weight]).cuda()
+            if classify:
+                pos_weight = torch.Tensor([pos_weight]).cuda()
         else:
             X_tr = torch.stack([torch.Tensor(x) for x in X_train])
             X_ts = torch.stack([torch.Tensor(x) for x in X_test])
             y_tr = torch.Tensor(y_train).view(-1, 1)
             y_ts = torch.Tensor(y_test).view(-1, 1)
-            pos_weight = torch.Tensor([pos_weight])
+            if classify:
+                pos_weight = torch.Tensor([pos_weight])
 
         train_loader = data_utils.DataLoader(
                 data_utils.TensorDataset(X_tr, y_tr),
                 batch_size=batch_size, shuffle=True)
 
+        # TODO: this model should be polymorphic (classify/regress)
         model = LogisticRegression(X_train.shape[1])
         if self.use_gpu:
             model = model.cuda()
 
         # pos_weight is a scalar, the weight for the 1 class
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        if classify:
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        else:
+            criterion = nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         #                 optimizer, patience=5)
@@ -348,8 +358,12 @@ class TorchLR:
             y_pred_test = y_pred_test.detach().numpy()
 
 
-        y_pred_bn_train = (y_pred_train > 0).astype('int')
-        y_pred_bn_test = (y_pred_test > 0).astype('int')
+        if classify:
+            y_pred_bn_train = (y_pred_train > 0).astype('int')
+            y_pred_bn_test = (y_pred_test > 0).astype('int')
+        else:
+            y_pred_bn_train = np.array([])
+            y_pred_bn_test = np.array([])
 
         return ((train_loss, test_loss),
                 (y_pred_train, y_pred_test),

@@ -31,23 +31,23 @@ run_netreg <- function(args) {
     y_pred_test <- predict(fit, X_test)
 
     # write predictions and coefficients to results_dir
-    write.table(y_pred_train,
+    write.table(format(round(y_pred_train, 5), nsmall=5),
                 file=paste0(args$results_dir, '/r_preds_train_n',
                             args$num_samples, '_p', args$num_features,
-                            '_u', args$uncorr_frac, '_s', args$seed,
-                            '.txt'),
+                            '_e', args$noise_stdev, '_u', args$uncorr_frac,
+                            '_s', args$seed, '.txt'),
                 quote=F, sep='\t', row.names=F, col.names=F)
-    write.table(y_pred_test,
+    write.table(format(round(y_pred_test, 5), nsmall=5),
                 file=paste0(args$results_dir, '/r_preds_test_n',
                             args$num_samples, '_p', args$num_features,
-                            '_u', args$uncorr_frac, '_s', args$seed,
-                            '.txt'),
+                            '_e', args$noise_stdev, '_u', args$uncorr_frac,
+                            '_s', args$seed, '.txt'),
                 quote=F, sep='\t', row.names=F, col.names=F)
-    write.table(coef(fit),
+    write.table(format(round(coef(fit), 5), nsmall=5),
                 file=paste0(args$results_dir, '/r_coefs_n',
                             args$num_samples, '_p', args$num_features,
-                            '_u', args$uncorr_frac, '_s', args$seed,
-                            '.txt'),
+                            '_e', args$noise_stdev, '_u', args$uncorr_frac,
+                            '_s', args$seed, '.txt'),
                 quote=F, sep='\t', row.names=F, col.names=F)
 }
 
@@ -64,6 +64,7 @@ main <- function() {
     parser$add_argument('--network_file', required=T)
     parser$add_argument('--num_samples', required=T)
     parser$add_argument('--num_features', required=T)
+    parser$add_argument('--noise_stdev', required=T)
     parser$add_argument('--uncorr_frac', required=T)
     parser$add_argument('--results_dir', required=T)
     parser$add_argument('--seed', type='integer', required=T)

@@ -14,7 +14,7 @@ network_penalty = 0.1
 networks_dir = os.path.join(cfg.repo_root, 'simdata', 'sim_networks')
 results_dir = os.path.join(cfg.repo_root, 'simdata', 'clique_results')
 
-def run_benchmark_script(n, p, uncorr_frac, seed):
+def run_benchmark_script(n, p, noise_stdev, uncorr_frac, seed):
 
     num_networks = (p // 5) + 1
     script_args = [
@@ -29,6 +29,7 @@ def run_benchmark_script(n, p, uncorr_frac, seed):
         '--networks_dir', networks_dir,
         '--num_samples', str(n),
         '--num_features', str(p),
+        '--noise_stdev', str(noise_stdev),
         '--uncorr_frac', str(uncorr_frac),
         '--num_networks', str(num_networks),
         '--seed', str(seed),
@@ -50,9 +51,11 @@ data_dims = [
    # (1000, 100),
    # (1000, 1000)
 ]
+noise_stdevs = [0, 0.1, 1, 10]
 fracs = [0, 0.25, 0.5, 0.75, 1.0]
 
 for (n, p) in data_dims:
-    for uncorr_frac in fracs:
-        for seed in range(5):
-            run_benchmark_script(n, p, uncorr_frac, seed)
+    for noise_stdev in noise_stdevs:
+        for uncorr_frac in fracs:
+            for seed in range(5):
+                run_benchmark_script(n, p, noise_stdev, uncorr_frac, seed)
