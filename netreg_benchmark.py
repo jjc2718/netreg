@@ -14,6 +14,7 @@ import pandas as pd
 from collections import namedtuple
 from sklearn.model_selection import KFold
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.metrics import mean_squared_error
 
 import config as cfg
 import utilities.data_utilities as du
@@ -42,6 +43,7 @@ p.add_argument('--results_dir',
                help='Directory to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
 p.add_argument('--uncorr_frac', type=float, default=0.5)
+p.add_argument('--noise_stdev', type=float, default=0)
 p.add_argument('--verbose', action='store_true')
 
 prms = p.add_argument_group('pytorch_params')
@@ -99,32 +101,28 @@ else:
     }
 
 cv_results = {
-    'torch_train_auroc': [],
-    'torch_train_aupr': [],
-    'torch_train_acc': [],
-    'torch_test_auroc': [],
-    'torch_test_aupr': [],
-    'torch_test_acc': [],
-    'r_train_auroc': [],
-    'r_train_aupr': [],
-    'r_train_acc': [],
-    'r_test_auroc': [],
-    'r_test_aupr': [],
-    'r_test_acc': [],
-    'sklearn_train_auroc': [],
-    'sklearn_train_aupr': [],
-    'sklearn_train_acc': [],
-    'sklearn_test_auroc': [],
-    'sklearn_test_aupr': [],
-    'sklearn_test_acc': []
+    # TODO: could calculate R^2 for regression fit?
+    # 'torch_train_mse': [],
+    # 'torch_train_rmse': [],
+    # 'torch_test_mse': [],
+    # 'torch_test_rmse': [],
+    'r_train_mse': [],
+    'r_train_rmse': [],
+    'r_test_mse': [],
+    'r_test_rmse': [],
+    'sklearn_train_mse': [],
+    'sklearn_train_rmse': [],
+    'sklearn_test_mse': [],
+    'sklearn_test_rmse': []
 }
 
 # generate simulated data
 train_frac = 0.8
 
-X, betas, y, is_correlated, adj_matrix, network_groups = snet.simulate_network(
+X, betas, y, is_correlated, adj_matrix, network_groups = snet.simulate_network_reg(
         args.num_samples, args.num_features, args.uncorr_frac,
-        args.num_networks, seed=args.seed, verbose=args.verbose)
+        args.num_networks, noise_stdev=args.noise_stdev, seed=args.seed,
+        verbose=args.verbose)
 
 train_ixs = ll.split_train_test(args.num_samples, train_frac, seed=args.seed,
                                 verbose=True)
@@ -179,6 +177,8 @@ if not os.path.exists(network_filename):
 ###########################################################
 # PYTORCH MODEL
 ###########################################################
+
+"""
 
 # Fit PyTorch model on training set, test on held out data
 torch_model = TorchLR(torch_params,
@@ -238,6 +238,8 @@ if args.plot_learning_curves is not None:
                                args.num_samples, args.num_features,
                                args.uncorr_frac, args.seed)))
 
+"""
+
 ###########################################################
 # R (netReg) MODEL
 ###########################################################
@@ -256,6 +258,7 @@ r_args = [
     '--uncorr_frac', str(args.uncorr_frac),
     '--results_dir', args.results_dir,
     '--seed', str(args.seed),
+    '--family', 'gaussian', # TODO change this for logistic regression
     '--l1_penalty', str(args.l1_penalty),
     '--network_penalty', str(args.network_penalty),
     '--num_epochs', str(args.num_epochs),
@@ -287,79 +290,60 @@ r_pred_test = np.loadtxt(
                      args.uncorr_frac, args.seed)),
     delimiter='\t')
 
+
+
 # get binary predictions
 r_pred_bn_train = (r_pred_train > 0.5).astype('int')
 r_pred_bn_test = (r_pred_test > 0.5).astype('int')
 
 # Calculate performance metrics
-r_train_results = get_threshold_metrics(
-    y_train, r_pred_train, drop=False
-)
-r_test_results = get_threshold_metrics(
-    y_test, r_pred_test, drop=False
-)
+r_train_mse = mean_squared_error(y_train, r_pred_train)
+r_train_rmse = np.sqrt(r_train_mse)
+r_test_mse = mean_squared_error(y_test, r_pred_test)
+r_test_rmse = np.sqrt(r_test_mse)
 
-cv_results['r_train_auroc'].append(r_train_results['auroc'])
-cv_results['r_train_aupr'].append(r_train_results['aupr'])
-cv_results['r_test_auroc'].append(r_test_results['auroc'])
-cv_results['r_test_aupr'].append(r_test_results['aupr'])
-cv_results['r_train_acc'].append(
-        TorchLR.calculate_accuracy(y_train,
-                                   r_pred_bn_train.flatten()))
-cv_results['r_test_acc'].append(
-        TorchLR.calculate_accuracy(y_test,
-                                   r_pred_bn_test.flatten()))
+cv_results['r_train_mse'].append(r_train_mse)
+cv_results['r_train_rmse'].append(r_train_rmse)
+cv_results['r_test_mse'].append(r_test_mse)
+cv_results['r_test_rmse'].append(r_test_rmse)
 
 ###########################################################
 # SCIKIT-LEARN MODEL (BASELINE)
 ###########################################################
 
-y_train_sk = pd.DataFrame({'status': y_train})
+logger.info('Running scikit-learn SGD model (no network penalty)')
 
-# Find the best scikit-learn model
-# maybe not a fair comparison since other models don't run CV
-cv_pipeline, y_pred_train_df, y_pred_test_df, y_cv_df = train_model(
-    x_train=X_train,
-    x_test=X_test,
-    y_train=y_train_sk,
-    alphas=[0.0],
-    l1_ratios=[0.0],
-    n_folds=cfg.folds,
-    max_iter=cfg.max_iter,
-)
+from sklearn.linear_model import SGDRegressor
 
-cv_pipeline.fit(X=X_train, y=y_train)
-sklearn_pred_train = cv_pipeline.decision_function(X_train)
-sklearn_pred_test = cv_pipeline.decision_function(X_test)
-sklearn_pred_bn_train = cv_pipeline.predict(X_train)
-sklearn_pred_bn_test = cv_pipeline.predict(X_test)
+reg = SGDRegressor(max_iter=args.num_epochs,
+                   learning_rate='constant',
+                   eta0=args.learning_rate,
+                   penalty='l1',
+                   alpha=args.l1_penalty)
+reg.fit(X=X_train, y=y_train.flatten())
+sklearn_pred_train = reg.predict(X_train)
+sklearn_pred_test = reg.predict(X_test)
 
 # Calculate performance metrics and extract model coefficients
-sklearn_train_results = get_threshold_metrics(
-    y_train, sklearn_pred_train, drop=False
-)
-sklearn_test_results = get_threshold_metrics(
-    y_test, sklearn_pred_test, drop=False
-)
+sklearn_train_mse = mean_squared_error(y_train, sklearn_pred_train)
+sklearn_train_rmse = np.sqrt(sklearn_train_mse)
+sklearn_test_mse = mean_squared_error(y_test, sklearn_pred_test)
+sklearn_test_rmse = np.sqrt(sklearn_test_mse)
 
-s_coef = np.concatenate((
-    cv_pipeline.best_estimator_.named_steps['classify'].intercept_,
-    cv_pipeline.best_estimator_.named_steps['classify'].coef_[0]))
+s_coef = np.concatenate((reg.intercept_, reg.coef_))
 
-cv_results['sklearn_train_auroc'].append(sklearn_train_results['auroc'])
-cv_results['sklearn_train_aupr'].append(sklearn_train_results['aupr'])
-cv_results['sklearn_test_auroc'].append(sklearn_test_results['auroc'])
-cv_results['sklearn_test_aupr'].append(sklearn_test_results['aupr'])
-cv_results['sklearn_train_acc'].append(
-        TorchLR.calculate_accuracy(y_train, sklearn_pred_bn_train))
-cv_results['sklearn_test_acc'].append(
-        TorchLR.calculate_accuracy(y_test, sklearn_pred_bn_test))
+cv_results['sklearn_train_mse'].append(sklearn_train_mse)
+cv_results['sklearn_train_rmse'].append(sklearn_train_rmse)
+cv_results['sklearn_test_mse'].append(sklearn_test_mse)
+cv_results['sklearn_test_rmse'].append(sklearn_test_rmse)
 
 # Save results to results directory
+'''
 if hasattr(torch_model, 'results_df'):
     torch_model.results_df.to_csv(os.path.join(args.results_dir,
                                                'torch_params_{}.tsv'.format(
                                                    args.seed)), sep='\t')
+'''
 
 cv_results_file = os.path.join(args.results_dir,
                                'cv_results_n{}_p{}_u{}_s{}.pkl'.format(
@@ -369,10 +353,12 @@ true_coef_file = os.path.join(args.results_dir,
                               'true_coefs_n{}_p{}_u{}_s{}.txt'.format(
                                   args.num_samples, args.num_features,
                                   args.uncorr_frac, args.seed))
+'''
 torch_coef_file = os.path.join(args.results_dir,
                                'torch_coefs_n{}_p{}_u{}_s{}.txt'.format(
                                    args.num_samples, args.num_features,
                                    args.uncorr_frac, args.seed))
+'''
 sklearn_coef_file = os.path.join(args.results_dir,
                                  'sklearn_coefs_n{}_p{}_u{}_s{}.txt'.format(
                                    args.num_samples, args.num_features,
@@ -382,6 +368,6 @@ with open(cv_results_file, 'wb') as f:
     pkl.dump(cv_results, f)
 
 np.savetxt(true_coef_file, betas, fmt='%.5f', delimiter='\t')
-np.savetxt(torch_coef_file, torch_weights, fmt='%.5f', delimiter='\t')
+# np.savetxt(torch_coef_file, torch_weights, fmt='%.5f', delimiter='\t')
 np.savetxt(sklearn_coef_file, s_coef, fmt='%.5f', delimiter='\t')
 

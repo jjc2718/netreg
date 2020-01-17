@@ -22,7 +22,7 @@ run_netreg <- function(args) {
                    G.X=G.X,
                    lambda=args$l1_penalty,
                    psigx=args$network_penalty,
-                   family='binomial',
+                   family=args$family,
                    maxit=args$num_epochs,
                    learning.rate=args$learning_rate)
 
@@ -70,6 +70,7 @@ main <- function() {
     parser$add_argument('--verbose', action='store_true')
 
     # parameters for network-regularized regression model
+    parser$add_argument('--family', default='gaussian')
     parser$add_argument('--l1_penalty', type='double', default=1)
     parser$add_argument('--network_penalty', type='double', default=1)
     parser$add_argument('--num_epochs', type='integer', default=100)
