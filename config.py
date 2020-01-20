@@ -58,9 +58,9 @@ torch_num_inner_folds = 3
 
 # hyperparameters for network-regularized logistic regression
 netreg_param_choices = {
-    'learning_rate': [0.001, 0.0001, 5e-5, 1e-5],
-    'batch_size': [20, 50, 100],
-    'num_epochs': [50, 100, 200],
+    'learning_rate': [0.01, 0.005, 0.001, 5e-4],
+    'batch_size': [50],
+    'num_epochs': [100, 200, 500],
     'l1_penalty': [0.0],
-    'network_penalty': [10, 100, 1000]
+    'network_penalty': [0.1, 1, 10, 100]
 }

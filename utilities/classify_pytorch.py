@@ -78,8 +78,9 @@ class TorchLR:
         # if there are multiple choices, select num_iters parameter
         # combinations to be tested during the parameter search
         if max_params_length > 1:
-            params_map = self.get_params_map(params_map,
-                                             num_iters=num_iters)
+            params_map = get_params_map(params_map,
+                                        self.seed,
+                                        num_iters=num_iters)
         self.params_map = params_map
         self.num_inner_folds = num_inner_folds
         self.use_gpu = use_gpu
@@ -103,7 +104,8 @@ class TorchLR:
         return (y == y_pred).mean()
 
 
-    def get_params_map(self, param_choices, num_iters=10):
+    @staticmethod
+    def get_params_map(param_choices, seed, num_iters=10):
         """Get random combinations of hyperparameters to search over.
 
         Currently combinations are selected with replacement, i.e. duplicates can
@@ -133,7 +135,7 @@ class TorchLR:
             Maps hyperparameter names to lists of values to try.
 
         """
-        import random; random.seed(self.seed)
+        import random; random.seed(seed)
         # sorting here ensures that results for models that share the same
         # parameters will have the same choices, and thus will be easily
         # comparable

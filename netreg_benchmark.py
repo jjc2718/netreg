@@ -132,32 +132,10 @@ if args.param_search:
             X_train, y_train, test_size=valid_size, random_state=args.seed)
     logger.info('Train/tune/test samples: {}/{}/{}'.format(
             X_subtrain.shape[0], X_tune.shape[0], X_test.shape[0]))
+    params_map = TorchLR.get_params_map(torch_params, args.seed, num_iters=20)
 else:
     logger.info('Train samples: {}, test samples: {}'.format(
         X_train.shape[0], X_test.shape[0]))
-
-# generate tempfiles for train/test data, to pass to R script
-train_data = tempfile.NamedTemporaryFile(mode='w', delete=False)
-test_data = tempfile.NamedTemporaryFile(mode='w', delete=False)
-train_labels = tempfile.NamedTemporaryFile(mode='w', delete=False)
-test_labels = tempfile.NamedTemporaryFile(mode='w', delete=False)
-np.savetxt(train_data, X_train, fmt='%.5f', delimiter='\t')
-np.savetxt(test_data, X_test, fmt='%.5f', delimiter='\t')
-np.savetxt(train_labels, y_train, fmt='%i')
-np.savetxt(test_labels, y_test, fmt='%i')
-Filenames = namedtuple('Filenames', ['train_data', 'test_data',
-                                     'train_labels', 'test_labels'])
-fnames = Filenames(
-    train_data=train_data.name,
-    test_data=test_data.name,
-    train_labels=train_labels.name,
-    test_labels=test_labels.name
-)
-train_data.close()
-
-test_data.close()
-train_labels.close()
-test_labels.close()
 
 # make directory for learning curve if included
 if args.plot_learning_curves is not None:
@@ -168,6 +146,7 @@ else:
     learning_curves = False
 
 # generate network for simulated data if it doesn't already exist
+# this only has to be done once, even if we're doing a parameter search
 if not os.path.exists(args.networks_dir):
     os.makedirs(args.networks_dir)
 
@@ -186,20 +165,53 @@ if not os.path.exists(network_filename):
 # PYTORCH MODEL
 ###########################################################
 
-logger.info('Running PyTorch model...')
+logger.info('##### Running PyTorch model... #####')
 
-# Fit PyTorch model on training set, test on held out data
-torch_model = TorchLR(torch_params,
-                      seed=args.seed,
-                      network_file=network_filename,
-                      network_features=np.ones(args.num_features).astype('bool'),
-                      learning_curves=learning_curves,
-                      use_gpu=args.gpu,
-                      verbose=args.verbose)
+# this code is similar to torch_tuning function in classify_pytorch.py
+tuning_result = {
+    'param_set': [],
+    'train/tune': [],
+    'loss': [],
+}
+for param in params_map.keys():
+    tuning_result[param] = []
 
-losses, preds, preds_bn = torch_model.train_torch_model(X_train, X_test,
-                                                        y_train, y_test,
-                                                        save_weights=True)
+num_iters = len(params_map[list(params_map.keys())[0]])
+for ix in range(num_iters):
+    # for each parameter combination, fit PyTorch model on subtrain
+    # set, and test on tune data
+    print('-- Parameter set {} of {}...'.format(ix+1, num_iters),
+          end='')
+    params = {k: [v[ix]] for k, v in params_map.items()}
+    torch_model = TorchLR(params,
+                          seed=args.seed,
+                          network_file=network_filename,
+                          network_features=np.ones(args.num_features).astype('bool'),
+                          learning_curves=learning_curves,
+                          use_gpu=args.gpu,
+                          verbose=args.verbose)
+
+    losses, preds, _ = torch_model.train_torch_model(X_subtrain, X_tune,
+                                                     y_subtrain, y_tune)
+    y_pred_subtrain, y_pred_tune = preds
+    subtrain_loss, tune_loss = losses
+    logger.info('subtrain_loss: {:.4f}, tune_loss: {:.4f}'.format(
+                subtrain_loss, tune_loss))
+    tuning_result['param_set'].append(ix)
+    tuning_result['train/tune'].append('train')
+    tuning_result['loss'].append(subtrain_loss)
+    for param in params_map.keys():
+        tuning_result[param].append(params_map[param][ix])
+    tuning_result['param_set'].append(ix)
+    tuning_result['train/tune'].append('tune')
+    tuning_result['loss'].append(tune_loss)
+    for param in params_map.keys():
+        tuning_result[param].append(params_map[param][ix])
+
+print(pd.DataFrame(tuning_result))
+exit()
+
+# train model with best params here...
 
 torch_weights = torch_model.last_weights.flatten()
 torch_pred_train, torch_pred_test = preds
@@ -240,6 +252,29 @@ if args.plot_learning_curves is not None:
 ###########################################################
 # R (netReg) MODEL
 ###########################################################
+
+# generate tempfiles for train/test data, to pass to R script
+train_data = tempfile.NamedTemporaryFile(mode='w', delete=False)
+test_data = tempfile.NamedTemporaryFile(mode='w', delete=False)
+train_labels = tempfile.NamedTemporaryFile(mode='w', delete=False)
+test_labels = tempfile.NamedTemporaryFile(mode='w', delete=False)
+np.savetxt(train_data, X_train, fmt='%.5f', delimiter='\t')
+np.savetxt(test_data, X_test, fmt='%.5f', delimiter='\t')
+np.savetxt(train_labels, y_train, fmt='%i')
+np.savetxt(test_labels, y_test, fmt='%i')
+Filenames = namedtuple('Filenames', ['train_data', 'test_data',
+                                     'train_labels', 'test_labels'])
+fnames = Filenames(
+    train_data=train_data.name,
+    test_data=test_data.name,
+    train_labels=train_labels.name,
+    test_labels=test_labels.name
+)
+train_data.close()
+
+test_data.close()
+train_labels.close()
+test_labels.close()
 
 # Fit R model on training set an# test on held out data
 r_args = [
