@@ -98,24 +98,3 @@ def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1,
 
     return (X, y, pis, is_correlated)
 
-
-def split_train_test(n, train_frac, seed=1, verbose=False):
-    """Split n samples into train and test indices.
-
-    Gives floor(n * train_frac) indices for training samples (the rest should
-    be used for testing).
-    """
-    np.random.seed(seed)
-
-    n_train = int(train_frac * n)
-    n_test = n - n_train
-
-    if verbose:
-        print('Train samples: {}, test samples: {}'.format(n_train, n_test))
-
-    train_ixs = np.zeros(n).astype('bool')
-    train_ixs[:n_train] = True
-    np.random.shuffle(train_ixs)
-
-    return train_ixs
-

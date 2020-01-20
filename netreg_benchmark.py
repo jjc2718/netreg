@@ -12,7 +12,7 @@ import pickle as pkl
 import numpy as np
 import pandas as pd
 from collections import namedtuple
-from sklearn.model_selection import KFold
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.metrics import mean_squared_error
 
@@ -117,17 +117,24 @@ cv_results = {
 }
 
 # generate simulated data
-train_frac = 0.8
-
 X, betas, y, is_correlated, adj_matrix, network_groups = snet.simulate_network_reg(
         args.num_samples, args.num_features, args.uncorr_frac,
         args.num_networks, noise_stdev=args.noise_stdev, seed=args.seed,
         verbose=args.verbose)
 
-train_ixs = ll.split_train_test(args.num_samples, train_frac, seed=args.seed,
-                                verbose=True)
-X_train, X_test = X[train_ixs], X[~train_ixs]
-y_train, y_test = y[train_ixs], y[~train_ixs]
+# split simulated data into train/test sets (and optionally tune set)
+X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=cfg.test_size, random_state=args.seed)
+
+if args.param_search:
+    valid_size = (X.shape[0] * cfg.test_size) / X_train.shape[0]
+    X_subtrain, X_tune, y_subtrain, y_tune = train_test_split(
+            X_train, y_train, test_size=valid_size, random_state=args.seed)
+    logger.info('Train/tune/test samples: {}/{}/{}'.format(
+            X_subtrain.shape[0], X_tune.shape[0], X_test.shape[0]))
+else:
+    logger.info('Train samples: {}, test samples: {}'.format(
+        X_train.shape[0], X_test.shape[0]))
 
 # generate tempfiles for train/test data, to pass to R script
 train_data = tempfile.NamedTemporaryFile(mode='w', delete=False)

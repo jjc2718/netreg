@@ -44,6 +44,7 @@ test_params = {
     'n_test': 100,
     'p': 200
 }
+test_size = 0.2
 
 # hyperparameters for PyTorch logistic regression
 torch_param_choices = {
