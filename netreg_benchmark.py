@@ -4,6 +4,7 @@ data.
 
 """
 import os
+import time
 import argparse
 import subprocess
 import logging
@@ -14,7 +15,7 @@ import pandas as pd
 from collections import namedtuple
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score
 
 import config as cfg
 import utilities.data_utilities as du
@@ -102,18 +103,18 @@ else:
 
 cv_results = {
     # TODO: could calculate R^2 for regression fit?
-    'torch_train_mse': [],
     'torch_train_rmse': [],
-    'torch_test_mse': [],
+    'torch_train_r2': [],
     'torch_test_rmse': [],
-    'r_train_mse': [],
-    'r_train_rmse': [],
-    'r_test_mse': [],
-    'r_test_rmse': [],
-    'sklearn_train_mse': [],
+    'torch_test_r2': [],
+    # 'r_train_mse': [],
+    # 'r_train_rmse': [],
+    # 'r_test_mse': [],
+    # 'r_test_rmse': [],
     'sklearn_train_rmse': [],
-    'sklearn_test_mse': [],
-    'sklearn_test_rmse': []
+    'sklearn_train_r2': [],
+    'sklearn_test_rmse': [],
+    'sklearn_test_r2': []
 }
 
 # generate simulated data
@@ -132,7 +133,7 @@ if args.param_search:
             X_train, y_train, test_size=valid_size, random_state=args.seed)
     logger.info('Train/tune/test samples: {}/{}/{}'.format(
             X_subtrain.shape[0], X_tune.shape[0], X_test.shape[0]))
-    params_map = TorchLR.get_params_map(torch_params, args.seed, num_iters=20)
+    params_map = TorchLR.get_params_map(torch_params, args.seed, num_iters=10)
 else:
     logger.info('Train samples: {}, test samples: {}'.format(
         X_train.shape[0], X_test.shape[0]))
@@ -165,7 +166,7 @@ if not os.path.exists(network_filename):
 # PYTORCH MODEL
 ###########################################################
 
-logger.info('##### Running PyTorch model... #####')
+logger.info('##### Running parameter search for PyTorch model... #####')
 
 # this code is similar to torch_tuning function in classify_pytorch.py
 tuning_result = {
@@ -187,7 +188,7 @@ for ix in range(num_iters):
                           seed=args.seed,
                           network_file=network_filename,
                           network_features=np.ones(args.num_features).astype('bool'),
-                          learning_curves=learning_curves,
+                          learning_curves=False,
                           use_gpu=args.gpu,
                           verbose=args.verbose)
 
@@ -208,28 +209,48 @@ for ix in range(num_iters):
     for param in params_map.keys():
         tuning_result[param].append(params_map[param][ix])
 
-print(pd.DataFrame(tuning_result))
-exit()
+logger.info('##### Evaluating PyTorch model on best parameters #####')
 
-# train model with best params here...
+# get parameters from best result on tuning set
+results_df = pd.DataFrame(tuning_result)
+sorted_df = (
+    results_df.loc[results_df['train/tune'] == 'tune']
+              .sort_values(by='loss')
+              .reset_index()
+)
+best_ix = sorted_df.loc[0, 'param_set']
+best_params = {k: [v[best_ix]] for k, v in params_map.items()}
+
+# train/evaluate model with best params
+torch_model = TorchLR(best_params,
+                      seed=args.seed,
+                      network_file=network_filename,
+                      network_features=np.ones(args.num_features).astype('bool'),
+                      learning_curves=learning_curves,
+                      use_gpu=args.gpu,
+                      verbose=args.verbose)
+losses, preds, _ = torch_model.train_torch_model(X_train, X_test,
+                                                 y_train, y_test,
+                                                 save_weights=True)
+y_pred_train, y_pred_test = preds
+train_loss, test_loss = losses
 
 torch_weights = torch_model.last_weights.flatten()
 torch_pred_train, torch_pred_test = preds
-torch_pred_bn_train, torch_pred_bn_test = preds_bn
 
 # Calculate performance metrics
 # TODO: this could be a function
 torch_train_mse = mean_squared_error(y_train, torch_pred_train)
 torch_train_rmse = np.sqrt(torch_train_mse)
+torch_train_r2 = r2_score(y_train, torch_pred_train)
 torch_test_mse = mean_squared_error(y_test, torch_pred_test)
 torch_test_rmse = np.sqrt(torch_test_mse)
+torch_test_r2 = r2_score(y_test, torch_pred_test)
 
-cv_results['torch_train_mse'].append(torch_train_mse)
 cv_results['torch_train_rmse'].append(torch_train_rmse)
-cv_results['torch_test_mse'].append(torch_test_mse)
+cv_results['torch_train_r2'].append(torch_train_r2)
 cv_results['torch_test_rmse'].append(torch_test_rmse)
-
-best_torch_params = torch_model.best_params
+cv_results['torch_test_r2'].append(torch_test_r2)
 
 # TODO: move to function somewhere, for learning curve functionality
 # import matplotlib; matplotlib.use('Agg')
@@ -252,6 +273,8 @@ if args.plot_learning_curves is not None:
 ###########################################################
 # R (netReg) MODEL
 ###########################################################
+
+"""
 
 # generate tempfiles for train/test data, to pass to R script
 train_data = tempfile.NamedTemporaryFile(mode='w', delete=False)
@@ -342,19 +365,69 @@ cv_results['r_train_rmse'].append(r_train_rmse)
 cv_results['r_test_mse'].append(r_test_mse)
 cv_results['r_test_rmse'].append(r_test_rmse)
 
+"""
+
 ###########################################################
 # SCIKIT-LEARN MODEL (BASELINE)
 ###########################################################
 
-logger.info('Running scikit-learn SGD model (no network penalty)...')
+logger.info('##### Running parameter search for scikit-learn model... #####')
 
 from sklearn.linear_model import SGDRegressor
 
-reg = SGDRegressor(max_iter=args.num_epochs,
+tuning_result = {
+    'param_set': [],
+    'train/tune': [],
+    'loss': [],
+}
+for param in params_map.keys():
+    tuning_result[param] = []
+
+num_iters = len(params_map[list(params_map.keys())[0]])
+for ix in range(num_iters):
+    logger.info('-- Parameter set {} of {}...'.format(ix+1, num_iters))
+    t = time.time()
+    reg = SGDRegressor(max_iter=params_map['num_epochs'][ix],
+                       learning_rate='constant',
+                       eta0=params_map['learning_rate'][ix],
+                       penalty='l1',
+                       alpha=params_map['l1_penalty'][ix])
+    reg.fit(X=X_subtrain, y=y_subtrain.flatten())
+    y_pred_subtrain = reg.predict(X_subtrain)
+    y_pred_tune = reg.predict(X_tune)
+    subtrain_loss = mean_squared_error(y_subtrain, y_pred_subtrain)
+    tune_loss = mean_squared_error(y_tune, y_pred_tune)
+    logger.info('subtrain_loss: {:.4f}, tune_loss: {:.4f}'.format(
+                subtrain_loss, tune_loss))
+    tuning_result['param_set'].append(ix)
+    tuning_result['train/tune'].append('train')
+    tuning_result['loss'].append(subtrain_loss)
+    for param in params_map.keys():
+        tuning_result[param].append(params_map[param][ix])
+    tuning_result['param_set'].append(ix)
+    tuning_result['train/tune'].append('tune')
+    tuning_result['loss'].append(tune_loss)
+    for param in params_map.keys():
+        tuning_result[param].append(params_map[param][ix])
+
+logger.info('##### Evaluating scikit-learn model on best parameters #####')
+
+# get parameters from best result on tuning set
+results_df = pd.DataFrame(tuning_result)
+sorted_df = (
+    results_df.loc[results_df['train/tune'] == 'tune']
+              .sort_values(by='loss')
+              .reset_index()
+)
+best_ix = sorted_df.loc[0, 'param_set']
+best_params = {k: v[best_ix] for k, v in params_map.items()}
+
+# train/evaluate model with best params
+reg = SGDRegressor(max_iter=best_params['num_epochs'],
                    learning_rate='constant',
-                   eta0=args.learning_rate,
+                   eta0=best_params['learning_rate'],
                    penalty='l1',
-                   alpha=args.l1_penalty)
+                   alpha=best_params['l1_penalty'])
 reg.fit(X=X_train, y=y_train.flatten())
 sklearn_pred_train = reg.predict(X_train)
 sklearn_pred_test = reg.predict(X_test)
@@ -362,15 +435,17 @@ sklearn_pred_test = reg.predict(X_test)
 # Calculate performance metrics and extract model coefficients
 sklearn_train_mse = mean_squared_error(y_train, sklearn_pred_train)
 sklearn_train_rmse = np.sqrt(sklearn_train_mse)
+sklearn_train_r2 = r2_score(y_train, sklearn_pred_train)
 sklearn_test_mse = mean_squared_error(y_test, sklearn_pred_test)
 sklearn_test_rmse = np.sqrt(sklearn_test_mse)
+sklearn_test_r2 = r2_score(y_test, sklearn_pred_test)
 
 s_coef = np.concatenate((reg.intercept_, reg.coef_))
 
-cv_results['sklearn_train_mse'].append(sklearn_train_mse)
 cv_results['sklearn_train_rmse'].append(sklearn_train_rmse)
-cv_results['sklearn_test_mse'].append(sklearn_test_mse)
+cv_results['sklearn_train_r2'].append(sklearn_train_r2)
 cv_results['sklearn_test_rmse'].append(sklearn_test_rmse)
+cv_results['sklearn_test_r2'].append(sklearn_test_r2)
 
 # Save results to results directory
 if hasattr(torch_model, 'results_df'):
