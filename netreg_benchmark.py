@@ -21,7 +21,7 @@ import config as cfg
 import utilities.data_utilities as du
 import simdata.simulate_loglinear as ll
 import simdata.simulate_networks as snet
-from utilities.classify_pytorch import TorchLR
+from utilities.pytorch_model import TorchLR
 from tcga_util import (
     train_model,
     get_threshold_metrics,
