@@ -66,6 +66,7 @@ net.add_argument('--networks_dir', type=str,
 net.add_argument('--network_penalty', type=float, default=0,
                  help='Multiplier for network regularization term, defaults\
                        to 0 (no network penalty)')
+net.add_argument('--ignore_network', action='store_true')
 
 args = p.parse_args()
 
@@ -100,6 +101,11 @@ else:
         'num_epochs': [args.num_epochs],
         'network_penalty': [args.network_penalty]
     }
+
+# if ignore_network flag included, run pytorch with no network penalty
+# this is useful as a baseline
+if args.ignore_network:
+    torch_params['network_penalty'] = [0.0]
 
 cv_results = {
     # TODO: could calculate R^2 for regression fit?
