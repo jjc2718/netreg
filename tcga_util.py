@@ -388,8 +388,6 @@ def train_model(x_train, x_test, y_train, alphas, l1_ratios, n_folds=5, max_iter
                     random_state=0,
                     class_weight="balanced",
                     loss="log",
-                    learning_rate='constant',
-                    eta0=0.001,
                     max_iter=max_iter,
                     tol=1e-3,
                 ),

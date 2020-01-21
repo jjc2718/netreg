@@ -4,7 +4,6 @@ import pickle as pkl
 from sklearn.preprocessing import MinMaxScaler
 
 import config as cfg
-from tcga_util import process_y_matrix
 
 def load_raw_data(gene_list, verbose=False):
     # load data
@@ -26,7 +25,7 @@ def load_raw_data(gene_list, verbose=False):
     else:
         if verbose:
             print('Loading pan-cancer data from repo (warning: slow)...')
-        pancan_data = load_pancancer_data_from_repo()
+        pancan_data = load_pancancer_data()
         with open(cfg.pancan_data, 'wb') as f:
             pkl.dump(pancan_data, f)
 
@@ -81,8 +80,8 @@ def load_top_50():
     return genes_df
 
 
-def load_pancancer_data_from_repo():
-    """Load data to build feature matrices from pancancer repo."""
+def load_pancancer_data():
+    """Load data to build feature matrices from pancancer repo. """
 
     base_url = "https://github.com/greenelab/pancancer/raw"
     commit = "2a0683b68017fb226f4053e63415e4356191734f"
@@ -112,53 +111,11 @@ def load_pancancer_data_from_repo():
 
 
 def subset_genes_by_mad(train_df, test_df, mad_file, subset_mad_genes):
-    """Subset genes by mean absolute deviation."""
-
+    # subset genes by mean absolute deviation
     mad_genes_df = pd.read_csv(mad_file, sep='\t')
     mad_genes = mad_genes_df.iloc[0:subset_mad_genes, ].gene_id.astype(str)
 
     train_df = train_df.reindex(mad_genes, axis='columns')
     test_df = test_df.reindex(mad_genes, axis='columns')
     return (train_df, test_df)
-
-
-def load_labels(gene_name, classification, gene_dir, pancan_data,
-                include_copy=True):
-    """Load classification labels using processed TCGA data."""
-
-    # unpack pancancer data
-    (sample_freeze_df,
-     mutation_df,
-     copy_loss_df,
-     copy_gain_df,
-     mut_burden_df) = pancan_data
-
-    # process the y matrix for the given gene or pathway
-    y_mutation_df = mutation_df.loc[:, gene_name]
-
-    # include copy number gains for oncogenes
-    # and copy number loss for tumor suppressor genes (TSG)
-    if classification == "Oncogene":
-        y_copy_number_df = copy_gain_df.loc[:, gene_name]
-    elif classification == "TSG":
-        y_copy_number_df = copy_loss_df.loc[:, gene_name]
-    else:
-        y_copy_number_df = pd.DataFrame()
-        include_copy = False
-
-    # assemble and return labels
-    y_df = process_y_matrix(
-        y_mutation=y_mutation_df,
-        y_copy=y_copy_number_df,
-        include_copy=include_copy,
-        gene=gene_name,
-        sample_freeze=sample_freeze_df,
-        mutation_burden=mut_burden_df,
-        filter_count=cfg.filter_count,
-        filter_prop=cfg.filter_prop,
-        output_directory=gene_dir,
-        hyper_filter=5,
-    )
-
-    return y_df
 

@@ -41,8 +41,14 @@ np.random.seed(args.seed)
 algorithm = "raw"
 
 genes_df, pancan_data = du.load_raw_data(args.gene_list, verbose=args.verbose)
-rnaseq_train_df, rnaseq_test_df = du.load_expression_data(verbose=args.verbose,
-                                                          scale_input=True)
+
+(sample_freeze_df,
+ mutation_df,
+ copy_loss_df,
+ copy_gain_df,
+ mut_burden_df) = pancan_data
+
+rnaseq_train_df, rnaseq_test_df = du.load_expression_data(verbose=args.verbose)
 
 # Track total metrics for each gene in one file
 metric_cols = [
@@ -80,9 +86,34 @@ for gene_idx, gene_series in genes_df.iterrows():
         continue
 
     # Process the y matrix for the given gene or pathway
-    y_df = du.load_labels(gene_name, classification, gene_dir, pancan_data)
+    y_mutation_df = mutation_df.loc[:, gene_name]
+
+    # Include copy number gains for oncogenes
+    # and copy number loss for tumor suppressor genes (TSG)
+    include_copy = True
+    if classification == "Oncogene":
+        y_copy_number_df = copy_gain_df.loc[:, gene_name]
+    elif classification == "TSG":
+        y_copy_number_df = copy_loss_df.loc[:, gene_name]
+    else:
+        y_copy_number_df = pd.DataFrame()
+        include_copy = False
+
+    y_df = process_y_matrix(
+        y_mutation=y_mutation_df,
+        y_copy=y_copy_number_df,
+        include_copy=include_copy,
+        gene=gene_name,
+        sample_freeze=sample_freeze_df,
+        mutation_burden=mut_burden_df,
+        filter_count=cfg.filter_count,
+        filter_prop=cfg.filter_prop,
+        output_directory=gene_dir,
+        hyper_filter=5,
+    )
 
     model_no = 1
+
     for signal in ["signal", "shuffled"]:
         if signal == "shuffled":
             # Shuffle training data
@@ -136,7 +167,7 @@ for gene_idx, gene_series in genes_df.iterrows():
             x_test=x_test_df,
             y_train=y_train_df,
             alphas=cfg.alphas,
-            l1_ratios=[0.0],
+            l1_ratios=cfg.l1_ratios,
             n_folds=cfg.folds,
             max_iter=cfg.max_iter,
         )

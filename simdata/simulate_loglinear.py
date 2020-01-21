@@ -11,8 +11,7 @@ def shuffle_same(X, y):
     return X[:, p], y[p]
 
 
-def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1,
-                verbose=False, unit_coefs=False):
+def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1, verbose=False):
     """Simulate data from a log-linear model.
 
     See, for instance: https://stats.stackexchange.com/a/46525
@@ -82,13 +81,10 @@ def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1,
 
     # shuffle data and is_correlated indicators in same order, so we know
     # which features are correlated/not correlated with outcome
-    # X, is_correlated = shuffle_same(X, is_correlated)
+    X, is_correlated = shuffle_same(X, is_correlated)
 
     # draw regression coefficients (betas) from N(0, 1)
-    if unit_coefs:
-        B = np.ones((p_corr+1,))
-    else:
-        B = np.random.randn(p_corr+1)
+    B = np.random.randn(p_corr+1)
 
     # calculate Bernoulli parameter pi(x_i) for each sample x_i
     linsum = B[0] + (X_corr @ B[1:, np.newaxis])
@@ -97,4 +93,25 @@ def simulate_ll(n, p, uncorr_frac, duplicate_features=0, seed=1,
     y = np.random.binomial(1, pis.flatten())
 
     return (X, y, pis, is_correlated)
+
+
+def split_train_test(n, train_frac, seed=1, verbose=False):
+    """Split n samples into train and test indices.
+
+    Gives floor(n * train_frac) indices for training samples (the rest should
+    be used for testing).
+    """
+    np.random.seed(seed)
+
+    n_train = int(train_frac * n)
+    n_test = n - n_train
+
+    if verbose:
+        print('Train samples: {}, test samples: {}'.format(n_train, n_test))
+
+    train_ixs = np.zeros(n).astype('bool')
+    train_ixs[:n_train] = True
+    np.random.shuffle(train_ixs)
+
+    return train_ixs
 
