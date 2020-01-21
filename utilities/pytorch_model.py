@@ -57,7 +57,6 @@ class TorchLR:
             self.network_features = network_features
             import networkx as nx
             G = nx.read_weighted_edgelist(network_file, delimiter='\t')
-            # TODO: this should probably be stored as a sparse matrix
             lt = nx.laplacian_matrix(G)
             indices, values, shape = self._convert_csr_to_sparse_inputs(lt)
             self.laplacian = torch.sparse.FloatTensor(indices, values, shape)
