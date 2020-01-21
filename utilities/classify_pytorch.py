@@ -23,6 +23,7 @@ class LogisticRegression(nn.Module):
     def forward(self, x):
         return self.linear(x)
 
+
 class TorchLR:
     """Class to run hyperparameter search/cross-validation.
 
@@ -126,6 +127,9 @@ class TorchLR:
                 'l1_penalty': [0, 0.01, 0.1, 1, 10]
             }
 
+        seed : int
+            Seed for the random parameter choices.
+
         num_iters : int
             The number of combinations to search over.
 
@@ -195,6 +199,10 @@ class TorchLR:
         save_weights: bool
             Whether or not to save weights (coefficients) from trained model
 
+        learning_curves: bool
+            Whether or not to save learning curve information (loss values
+            over training epochs) from trained model
+
         Returns
         -------
         tuple : ((list, list), (list, list), (list, list))
@@ -246,7 +254,6 @@ class TorchLR:
                 data_utils.TensorDataset(X_tr, y_tr),
                 batch_size=batch_size, shuffle=True)
 
-        # TODO: this model should be polymorphic (classify/regress)
         model = LogisticRegression(X_train.shape[1])
         if self.use_gpu:
             model = model.cuda()
@@ -257,8 +264,6 @@ class TorchLR:
         else:
             criterion = nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-        # scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        #                 optimizer, patience=5)
 
         for epoch in range(num_epochs):
             running_loss = 0.0
@@ -268,24 +273,19 @@ class TorchLR:
                 loss = criterion(y_pred, y_batch)
 
                 # add l1 loss
-                # print([param for name, param in model.named_parameters()
-                #              if 'bias' not in name][0])
-                # weights = torch.Tensor(
-                #         [param for name, param in model.named_parameters()
-                #         if 'bias' not in name])
-                # print(weights)
-
                 l1_loss = sum(torch.norm(param, 1)
                                 for name, param in model.named_parameters()
                                 if 'bias' not in name)
                 loss += l1_penalty * l1_loss
 
-                # add network penalty if applicable
+                # add L2 network penalty if applicable
                 if self.laplacian is not None:
+                    # get weights w/gradients
                     w = [param for name, param in model.named_parameters()
                                if 'bias' not in name][0]
                     # filter for features that are in the network
                     w = w[:, self.network_features]
+                    # calculate w^T @ L @ w
                     network_loss = torch.mm(
                         w.view(1, -1),
                         torch.sparse.mm(self.laplacian, w.view(-1, 1)))
@@ -311,7 +311,7 @@ class TorchLR:
                             for name, param in model.named_parameters()
                             if 'bias' not in name)
                 ).detach()))
-                # also save network loss
+                # also save L2 network loss
                 network_weights = [param for name, param in model.named_parameters()
                                          if 'bias' not in name][0]
                 network_weights = network_weights[:, self.network_features]
@@ -323,10 +323,9 @@ class TorchLR:
                 ).detach()))
                 network_weights = model.linear.weight.data.reshape(-1)
 
-            # scheduler.step(running_loss)
-
         if save_weights:
-            # bias goes first, then weights in order
+            # bias is first, then weights in order
+            # this matches R coef() parameter order
             if self.use_gpu:
                 bias = model.linear.bias.data.cpu().numpy()
                 weights = model.linear.weight.data.cpu().numpy().flatten()
@@ -358,7 +357,6 @@ class TorchLR:
         else:
             y_pred_train = y_pred_train.detach().numpy()
             y_pred_test = y_pred_test.detach().numpy()
-
 
         if classify:
             y_pred_bn_train = (y_pred_train > 0).astype('int')
