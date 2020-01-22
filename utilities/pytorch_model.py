@@ -2,14 +2,16 @@ import os
 import time
 import numpy as np
 import pandas as pd
+import networkx as nx
+import scipy.sparse as sp
+import torch
+import torch.nn as nn
+import torch.utils.data as data_utils
 from sklearn.model_selection import (
     KFold,
     cross_val_predict
 )
 from sklearn.metrics import roc_auc_score
-import torch
-import torch.nn as nn
-import torch.utils.data as data_utils
 
 
 class LogisticRegression(nn.Module):
@@ -55,7 +57,6 @@ class TorchLR:
             assert network_features is not None, (
                 'list of features in network should be included')
             self.network_features = network_features
-            import networkx as nx
             G = nx.read_weighted_edgelist(network_file, delimiter='\t')
             lt = nx.laplacian_matrix(G)
             indices, values, shape = self._convert_csr_to_sparse_inputs(lt)
@@ -89,8 +90,10 @@ class TorchLR:
 
 
     def _convert_csr_to_sparse_inputs(self, X):
-        # adapted from code at https://github.com/suinleelab/attributionpriors
-        import scipy.sparse as sp
+        """Converts a scipy csr_matrix into the inputs for a PyTorch sparse matrix.
+
+        Adapted from code at https://github.com/suinleelab/attributionpriors
+        """
         coo = sp.coo_matrix(X)
         indices = torch.LongTensor(np.mat([coo.row, coo.col]))
         values = torch.FloatTensor(coo.data)
