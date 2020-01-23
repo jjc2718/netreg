@@ -8,7 +8,7 @@ import config as cfg
 networks_dir = os.path.join(cfg.repo_root, 'simdata', 'sim_networks')
 
 def run_benchmark_script(n, p, noise_stdev, uncorr_frac, seed,
-                         results_dir, ignore_network=False):
+                         results_dir, gpu=False, ignore_network=False):
 
     num_networks = (p // 5) + 1
     script_args = [
@@ -25,6 +25,8 @@ def run_benchmark_script(n, p, noise_stdev, uncorr_frac, seed,
         '--seed', str(seed),
         '--verbose'
     ]
+    if gpu:
+        script_args.append('--gpu')
     if ignore_network:
         script_args.append('--ignore_network')
 
@@ -34,6 +36,7 @@ def run_benchmark_script(n, p, noise_stdev, uncorr_frac, seed,
 
 def parse_args():
     p = argparse.ArgumentParser()
+    p.add_argument('--gpu', action='store_true')
     p.add_argument('--ignore_network', action='store_true')
     return p.parse_args()
 
@@ -61,11 +64,13 @@ if __name__ == '__main__':
     if args.ignore_network:
         results_dir = os.path.join(cfg.repo_root, 'simdata', 'param_search_results', 'ignore_network')
     else:
-        results_dir = os.path.join(cfg.repo_root, 'simdata', 'param_search_results')
+        # results_dir = os.path.join(cfg.repo_root, 'simdata', 'param_search_results')
+        results_dir = os.path.join(cfg.repo_root, 'test_benchmark')
 
     for (n, p) in data_dims:
         for noise_stdev in noise_stdevs:
             for uncorr_frac in fracs:
                 for seed in range(5):
                     run_benchmark_script(n, p, noise_stdev, uncorr_frac, seed,
-                                         results_dir, ignore_network=args.ignore_network)
+                                         results_dir, gpu=args.gpu,
+                                         ignore_network=args.ignore_network)

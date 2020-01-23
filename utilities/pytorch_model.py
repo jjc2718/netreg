@@ -60,7 +60,8 @@ class TorchLR:
             G = nx.read_weighted_edgelist(network_file, delimiter='\t')
             lt = nx.laplacian_matrix(G)
             indices, values, shape = self._convert_csr_to_sparse_inputs(lt)
-            self.laplacian = torch.sparse.FloatTensor(indices, values, shape)
+            device = torch.device('cuda' if use_gpu else 'cpu')
+            self.laplacian = torch.sparse.FloatTensor(indices, values, shape).to(device)
         else:
             self.laplacian = None
 
@@ -237,28 +238,19 @@ class TorchLR:
             if self.verbose:
                 print('\n[0, 1]: {} (pos_weight={:.4f})'.format(train_count, pos_weight))
 
-        if self.use_gpu:
-            X_tr = torch.stack([torch.Tensor(x) for x in X_train]).cuda()
-            X_ts = torch.stack([torch.Tensor(x) for x in X_test]).cuda()
-            y_tr = torch.Tensor(y_train).view(-1, 1).cuda()
-            y_ts = torch.Tensor(y_test).view(-1, 1).cuda()
-            if classify:
-                pos_weight = torch.Tensor([pos_weight]).cuda()
-        else:
-            X_tr = torch.stack([torch.Tensor(x) for x in X_train])
-            X_ts = torch.stack([torch.Tensor(x) for x in X_test])
-            y_tr = torch.Tensor(y_train).view(-1, 1)
-            y_ts = torch.Tensor(y_test).view(-1, 1)
-            if classify:
-                pos_weight = torch.Tensor([pos_weight])
+        device = torch.device('cuda' if self.use_gpu else 'cpu')
+        X_tr = torch.stack([torch.Tensor(x) for x in X_train]).to(device)
+        X_ts = torch.stack([torch.Tensor(x) for x in X_test]).to(device)
+        y_tr = torch.Tensor(y_train).view(-1, 1).to(device)
+        y_ts = torch.Tensor(y_test).view(-1, 1).to(device)
+        if classify:
+            pos_weight = torch.Tensor([pos_weight]).to(device)
 
         train_loader = data_utils.DataLoader(
                 data_utils.TensorDataset(X_tr, y_tr),
                 batch_size=batch_size, shuffle=True)
 
-        model = LogisticRegression(X_train.shape[1])
-        if self.use_gpu:
-            model = model.cuda()
+        model = LogisticRegression(X_train.shape[1]).to(device)
 
         # pos_weight is a scalar, the weight for the 1 class
         if classify:
