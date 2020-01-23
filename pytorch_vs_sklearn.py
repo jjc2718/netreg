@@ -17,7 +17,7 @@ from sklearn.model_selection import KFold
 from sklearn.preprocessing import MinMaxScaler
 
 import config as cfg
-from utilities.classify_pytorch import TorchLR
+from utilities.pytorch_model import TorchLR
 from tcga_util import (
     train_model,
     load_pancancer_data,

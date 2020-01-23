@@ -2,7 +2,9 @@
 **/.ipynb_checkpoints/*
 
 data/*
-models/*
+compression_models/*
 output/*
 pytorch_results/*
 results/*
+simdata/results/*
+simdata/sim_networks/*

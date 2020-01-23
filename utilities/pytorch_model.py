@@ -1,14 +1,17 @@
+import os
 import time
 import numpy as np
 import pandas as pd
+import networkx as nx
+import scipy.sparse as sp
+import torch
+import torch.nn as nn
+import torch.utils.data as data_utils
 from sklearn.model_selection import (
     KFold,
     cross_val_predict
 )
 from sklearn.metrics import roc_auc_score
-import torch
-import torch.nn as nn
-import torch.utils.data as data_utils
 
 
 class LogisticRegression(nn.Module):
@@ -22,6 +25,7 @@ class LogisticRegression(nn.Module):
     def forward(self, x):
         return self.linear(x)
 
+
 class TorchLR:
     """Class to run hyperparameter search/cross-validation.
 
@@ -32,6 +36,9 @@ class TorchLR:
                  seed=1,
                  num_iters=10,
                  num_inner_folds=4,
+                 network_file=None,
+                 network_features=None,
+                 learning_curves=False,
                  use_gpu=False,
                  verbose=False):
 
@@ -40,9 +47,31 @@ class TorchLR:
         self.seed = seed
         torch.manual_seed(self.seed)
         np.random.seed(self.seed)
-        if torch.backends.cudnn.enabled:
+        if use_gpu and torch.backends.cudnn.enabled:
             torch.backends.cudnn.deterministic = True
             torch.backends.cudnn.benchmark = False
+
+        # if both network_file and network_penalty are provided, load network
+        # data and calculate graph Laplacian
+        if network_file is not None and params_map['network_penalty'] != 0:
+            assert network_features is not None, (
+                'list of features in network should be included')
+            self.network_features = network_features
+            G = nx.read_weighted_edgelist(network_file, delimiter='\t')
+            lt = nx.laplacian_matrix(G)
+            indices, values, shape = self._convert_csr_to_sparse_inputs(lt)
+            device = torch.device('cuda' if use_gpu else 'cpu')
+            self.laplacian = torch.sparse.FloatTensor(indices, values, shape).to(device)
+        else:
+            self.laplacian = None
+
+        # dict for monitoring quantities of interest (e.g. loss over epochs)
+        self.monitor_ = {
+            'train_loss': [],
+            'test_loss': [],
+            'l1_loss': [],
+            'network_loss': []
+        }
 
         max_params_length = max(len(vs) for k, vs in params_map.items())
         # if there's only one choice provided for each hyperparameter,
@@ -51,12 +80,26 @@ class TorchLR:
         # if there are multiple choices, select num_iters parameter
         # combinations to be tested during the parameter search
         if max_params_length > 1:
-            params_map = self.get_params_map(params_map,
-                                             num_iters=num_iters)
+            params_map = get_params_map(params_map,
+                                        self.seed,
+                                        num_iters=num_iters)
         self.params_map = params_map
         self.num_inner_folds = num_inner_folds
         self.use_gpu = use_gpu
+        self.learning_curves = learning_curves
         self.verbose = verbose
+
+
+    def _convert_csr_to_sparse_inputs(self, X):
+        """Converts a scipy csr_matrix into the inputs for a PyTorch sparse matrix.
+
+        Adapted from code at https://github.com/suinleelab/attributionpriors
+        """
+        coo = sp.coo_matrix(X)
+        indices = torch.LongTensor(np.mat([coo.row, coo.col]))
+        values = torch.FloatTensor(coo.data)
+        return indices, values, coo.shape
+
 
     @staticmethod
     def calculate_accuracy(y, y_pred):
@@ -64,7 +107,9 @@ class TorchLR:
         assert (y.ndim == 1 and y_pred.ndim == 1), "labels must be flattened"
         return (y == y_pred).mean()
 
-    def get_params_map(self, param_choices, num_iters=10):
+
+    @staticmethod
+    def get_params_map(param_choices, seed, num_iters=10):
         """Get random combinations of hyperparameters to search over.
 
         Currently combinations are selected with replacement, i.e. duplicates can
@@ -85,6 +130,9 @@ class TorchLR:
                 'l1_penalty': [0, 0.01, 0.1, 1, 10]
             }
 
+        seed : int
+            Seed for the random parameter choices.
+
         num_iters : int
             The number of combinations to search over.
 
@@ -94,7 +142,7 @@ class TorchLR:
             Maps hyperparameter names to lists of values to try.
 
         """
-        import random; random.seed(self.seed)
+        import random; random.seed(seed)
         # sorting here ensures that results for models that share the same
         # parameters will have the same choices, and thus will be easily
         # comparable
@@ -123,13 +171,14 @@ class TorchLR:
 
         losses, preds, preds_bn = self.torch_model(X_train, X_test, y_train, y_test,
                                                    best_params,
-                                                   save_weights=save_weights)
+                                                   save_weights=save_weights,
+                                                   learning_curves=self.learning_curves)
 
         return losses, preds, preds_bn
 
 
     def torch_model(self, X_train, X_test, y_train, y_test, params,
-                    save_weights=False):
+                    save_weights=False, learning_curves=False):
 
         """Main function for training PyTorch model.
 
@@ -153,6 +202,10 @@ class TorchLR:
         save_weights: bool
             Whether or not to save weights (coefficients) from trained model
 
+        learning_curves: bool
+            Whether or not to save learning curve information (loss values
+            over training epochs) from trained model
+
         Returns
         -------
         tuple : ((list, list), (list, list), (list, list))
@@ -160,6 +213,9 @@ class TorchLR:
              (predictions on training data, predictions on testing data),
              (binarized predictions on training/test data))
         """
+        # TODO: make this a class option
+        classify = False
+
         if self.verbose:
             t = time.time()
 
@@ -168,42 +224,40 @@ class TorchLR:
         num_epochs = params['num_epochs']
         l1_penalty = params['l1_penalty']
 
+        if self.laplacian is not None:
+            network_penalty = params['network_penalty']
+
         # Weight loss function based on training data label imbalance
         # see, e.g. https://discuss.pytorch.org/t/about-bcewithlogitslosss-pos-weights/22567/2
         #
         # TODO: could add a function argument to turn this on/off (but in
         # general it seems to give slightly better results)
-        train_count = np.bincount(y_train)
-        pos_weight = train_count[0] / train_count[1]
-        if self.verbose:
-            print('\n[0, 1]: {} (pos_weight={:.4f})'.format(train_count, pos_weight))
+        if classify:
+            train_count = np.bincount(y_train)
+            pos_weight = train_count[0] / train_count[1]
+            if self.verbose:
+                print('\n[0, 1]: {} (pos_weight={:.4f})'.format(train_count, pos_weight))
 
-        if self.use_gpu:
-            X_tr = torch.stack([torch.Tensor(x) for x in X_train]).cuda()
-            X_ts = torch.stack([torch.Tensor(x) for x in X_test]).cuda()
-            y_tr = torch.Tensor(y_train).view(-1, 1).cuda()
-            y_ts = torch.Tensor(y_test).view(-1, 1).cuda()
-            pos_weight = torch.Tensor([pos_weight]).cuda()
-        else:
-            X_tr = torch.stack([torch.Tensor(x) for x in X_train])
-            X_ts = torch.stack([torch.Tensor(x) for x in X_test])
-            y_tr = torch.Tensor(y_train).view(-1, 1)
-            y_ts = torch.Tensor(y_test).view(-1, 1)
-            pos_weight = torch.Tensor([pos_weight])
+        device = torch.device('cuda' if self.use_gpu else 'cpu')
+        X_tr = torch.stack([torch.Tensor(x) for x in X_train]).to(device)
+        X_ts = torch.stack([torch.Tensor(x) for x in X_test]).to(device)
+        y_tr = torch.Tensor(y_train).view(-1, 1).to(device)
+        y_ts = torch.Tensor(y_test).view(-1, 1).to(device)
+        if classify:
+            pos_weight = torch.Tensor([pos_weight]).to(device)
 
         train_loader = data_utils.DataLoader(
                 data_utils.TensorDataset(X_tr, y_tr),
                 batch_size=batch_size, shuffle=True)
 
-        model = LogisticRegression(X_train.shape[1])
-        if self.use_gpu:
-            model = model.cuda()
+        model = LogisticRegression(X_train.shape[1]).to(device)
 
         # pos_weight is a scalar, the weight for the 1 class
-        criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        if classify:
+            criterion = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+        else:
+            criterion = nn.MSELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
-        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-                        optimizer, patience=5)
 
         for epoch in range(num_epochs):
             running_loss = 0.0
@@ -211,34 +265,82 @@ class TorchLR:
                 optimizer.zero_grad()
                 y_pred = model(X_batch)
                 loss = criterion(y_pred, y_batch)
+
                 # add l1 loss
                 l1_loss = sum(torch.norm(param, 1)
                                 for name, param in model.named_parameters()
                                 if 'bias' not in name)
                 loss += l1_penalty * l1_loss
+
+                # add L2 network penalty if applicable
+                if self.laplacian is not None:
+                    # get weights w/gradients
+                    w = [param for name, param in model.named_parameters()
+                               if 'bias' not in name][0]
+                    # filter for features that are in the network
+                    w = w[:, self.network_features]
+                    # calculate w^T @ L @ w
+                    network_loss = torch.mm(
+                        w.view(1, -1),
+                        torch.sparse.mm(self.laplacian, w.view(-1, 1)))
+                    loss += (network_penalty * network_loss).view(-1)[0]
+
                 running_loss += loss
                 loss.backward()
                 optimizer.step()
-            scheduler.step(running_loss)
+
+            if learning_curves:
+                # save train loss and test loss on whole dataset after each epoch
+                y_pred_train = model(X_tr)
+                y_pred_test = model(X_ts)
+                self.monitor_['train_loss'].append((
+                    criterion(y_pred_train, y_tr)
+                ).item())
+                self.monitor_['test_loss'].append((
+                    criterion(y_pred_test, y_ts)
+                ).item())
+                # also save l1 loss
+                self.monitor_['l1_loss'].append((
+                    sum(torch.norm(param, 1)
+                            for name, param in model.named_parameters()
+                            if 'bias' not in name)
+                ).item())
+                # also save L2 network loss
+                network_weights = [param for name, param in model.named_parameters()
+                                         if 'bias' not in name][0]
+                network_weights = network_weights[:, self.network_features]
+                network_loss = torch.mm(
+                    w.view(1, -1),
+                    torch.sparse.mm(self.laplacian, w.view(-1, 1)))
+                self.monitor_['network_loss'].append((
+                    (network_loss).view(-1)[0]
+                ).item())
+                network_weights = model.linear.weight.data.reshape(-1)
 
         if save_weights:
+            # bias is first, then weights in order
+            # this matches R coef() parameter order
             if self.use_gpu:
-                self.last_weights = model.linear.weight.data.cpu().numpy()
+                bias = model.linear.bias.data.cpu().numpy()
+                weights = model.linear.weight.data.cpu().numpy().flatten()
+                self.last_weights = np.concatenate((bias, weights))
             else:
-                self.last_weights = model.linear.weight.data.numpy()
+                bias = model.linear.bias.data.numpy()
+                weights = model.linear.weight.data.numpy().flatten()
+                self.last_weights = np.concatenate((bias, weights))
 
         y_pred_train = model(X_tr)
         y_pred_test = model(X_ts)
 
-        train_loss = float((
+        train_loss = (
                 criterion(y_pred_train, y_tr) +
                 l1_penalty * sum(torch.norm(param, 1) for param in model.parameters())
-        ).detach())
+        ).item()
 
-        test_loss = float((
+        test_loss = (
                 criterion(y_pred_test, y_ts) +
                 l1_penalty * sum(torch.norm(param, 1) for param in model.parameters())
-        ).detach())
+        ).item()
 
         if self.verbose:
             print('(time: {:.3f} sec)'.format(time.time() - t))
@@ -250,9 +352,12 @@ class TorchLR:
             y_pred_train = y_pred_train.detach().numpy()
             y_pred_test = y_pred_test.detach().numpy()
 
-
-        y_pred_bn_train = (y_pred_train > 0).astype('int')
-        y_pred_bn_test = (y_pred_test > 0).astype('int')
+        if classify:
+            y_pred_bn_train = (y_pred_train > 0).astype('int')
+            y_pred_bn_test = (y_pred_test > 0).astype('int')
+        else:
+            y_pred_bn_train = np.array([])
+            y_pred_bn_test = np.array([])
 
         return ((train_loss, test_loss),
                 (y_pred_train, y_pred_test),
