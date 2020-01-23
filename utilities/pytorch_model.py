@@ -293,18 +293,18 @@ class TorchLR:
                 # save train loss and test loss on whole dataset after each epoch
                 y_pred_train = model(X_tr)
                 y_pred_test = model(X_ts)
-                self.monitor_['train_loss'].append(float((
+                self.monitor_['train_loss'].append((
                     criterion(y_pred_train, y_tr)
-                ).detach()))
-                self.monitor_['test_loss'].append(float((
+                ).item())
+                self.monitor_['test_loss'].append((
                     criterion(y_pred_test, y_ts)
-                ).detach()))
+                ).item())
                 # also save l1 loss
-                self.monitor_['l1_loss'].append(float((
+                self.monitor_['l1_loss'].append((
                     sum(torch.norm(param, 1)
                             for name, param in model.named_parameters()
                             if 'bias' not in name)
-                ).detach()))
+                ).item())
                 # also save L2 network loss
                 network_weights = [param for name, param in model.named_parameters()
                                          if 'bias' not in name][0]
@@ -312,9 +312,9 @@ class TorchLR:
                 network_loss = torch.mm(
                     w.view(1, -1),
                     torch.sparse.mm(self.laplacian, w.view(-1, 1)))
-                self.monitor_['network_loss'].append(float((
+                self.monitor_['network_loss'].append((
                     (network_loss).view(-1)[0]
-                ).detach()))
+                ).item())
                 network_weights = model.linear.weight.data.reshape(-1)
 
         if save_weights:
@@ -332,15 +332,15 @@ class TorchLR:
         y_pred_train = model(X_tr)
         y_pred_test = model(X_ts)
 
-        train_loss = float((
+        train_loss = (
                 criterion(y_pred_train, y_tr) +
                 l1_penalty * sum(torch.norm(param, 1) for param in model.parameters())
-        ).detach())
+        ).item()
 
-        test_loss = float((
+        test_loss = (
                 criterion(y_pred_test, y_ts) +
                 l1_penalty * sum(torch.norm(param, 1) for param in model.parameters())
-        ).detach())
+        ).item()
 
         if self.verbose:
             print('(time: {:.3f} sec)'.format(time.time() - t))
