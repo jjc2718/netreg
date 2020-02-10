@@ -118,8 +118,15 @@ def simulate_network(n, p, uncorr_frac, num_networks, seed=1, verbose=False):
     return (X, B, y, is_correlated, adj_matrix, network_groups)
 
 
-def simulate_network_reg(n, p, uncorr_frac, num_networks, noise_stdev=0,
-                         seed=1, verbose=False):
+def simulate_network_reg(n,
+                         p,
+                         uncorr_frac,
+                         num_networks,
+                         noise_stdev=0,
+                         seed=1,
+                         add_frac=0,
+                         remove_frac=0,
+                         verbose=False):
     """Simulate data from a linear model with network collinearity.
 
     See simulate_network docstring for details of how coefficients and the
@@ -129,6 +136,11 @@ def simulate_network_reg(n, p, uncorr_frac, num_networks, noise_stdev=0,
     The noise_stdev parameter controls the Gaussian noise added to the
     real-valued labels (defaults to 0; i.e. labels are an exact linear
     combination of the features, with weights given by B).
+
+    Network noise parameters:
+
+    add_frac: percentage of non-existing edges to add
+    remove_frac: percentage of existing edges to remove
     """
     import itertools as it
     import networkx as nx
@@ -151,6 +163,44 @@ def simulate_network_reg(n, p, uncorr_frac, num_networks, noise_stdev=0,
         for (i, j) in it.combinations(group, 2):
             adj_matrix[i, j] = 1
             adj_matrix[j, i] = 1
+
+    # add/remove edges from network if necessary
+    if add_frac != 0 or remove_frac != 0:
+        add_copy = adj_matrix.copy()
+        remove_copy = adj_matrix.copy()
+
+    if add_frac != 0:
+        # step 1: flip edges
+        add_copy = (~add_copy.astype('bool')).astype('int')
+        # step 2: zero diagonal and lower triangle
+        np.fill_diagonal(add_copy, 0)
+        absent_edges = np.argwhere(np.triu(add_copy))
+
+        np.random.shuffle(absent_edges)
+        num_to_add = int(absent_edges.shape[0] * add_frac)
+        print(num_to_add)
+        to_add = absent_edges[:num_to_add, :]
+
+        adj_matrix[to_add.T[0, :], to_add.T[1, :]] = 1
+        adj_matrix[to_add.T[1, :], to_add.T[0, :]] = 1
+
+    if remove_frac != 0:
+        # NOTE these should be removed from the original set of edges
+        # (not the ones that were added just before this)
+        # TODO: better documentation
+
+        # just zero diagonal and take upper triangle
+        np.fill_diagonal(remove_copy, 0)
+        present_edges = np.argwhere(np.triu(remove_copy))
+
+        np.random.shuffle(present_edges)
+        num_to_remove = int(present_edges.shape[0] * remove_frac)
+        print(num_to_remove)
+        to_remove = present_edges[:num_to_remove, :]
+        print(to_remove)
+
+        adj_matrix[to_remove.T[0, :], to_remove.T[1, :]] = 0
+        adj_matrix[to_remove.T[1, :], to_remove.T[0, :]] = 0
 
     X = np.random.randn(n, p)
     B = np.zeros((p_corr,))
