@@ -62,5 +62,5 @@ netreg_param_choices = {
     'batch_size': [50],
     'num_epochs': [100, 200, 500],
     'l1_penalty': [0.0],
-    'network_penalty': [0.1, 1, 10, 100]
+    'network_penalty': [0, 0.1, 1, 10, 100]
 }

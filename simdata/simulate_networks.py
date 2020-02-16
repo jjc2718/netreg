@@ -126,6 +126,7 @@ def simulate_network_reg(n,
                          seed=1,
                          add_frac=0,
                          remove_frac=0,
+                         add_only_uncorr=False,
                          verbose=False):
     """Simulate data from a linear model with network collinearity.
 
@@ -141,6 +142,7 @@ def simulate_network_reg(n,
 
     add_frac: percentage of non-existing edges to add
     remove_frac: percentage of existing edges to remove
+    add_only_uncorr: only add edges between correlated and uncorrelated
     """
     import itertools as it
     import networkx as nx
@@ -169,16 +171,29 @@ def simulate_network_reg(n,
         add_copy = adj_matrix.copy()
         remove_copy = adj_matrix.copy()
 
+    def filter_pairs(absent_edges, is_correlated):
+        pairs = []
+        for i in range(absent_edges.shape[0]):
+            ix_1 = absent_edges[i, 0]
+            ix_2 = absent_edges[i, 1]
+            # only want to add correlated/uncorrelated pairs
+            if is_correlated[ix_1] and (not is_correlated[ix_2]):
+                pairs.append([ix_1, ix_2])
+            if is_correlated[ix_2] and (not is_correlated[ix_1]):
+                pairs.append([ix_1, ix_2])
+        return np.array(pairs)
+
     if add_frac != 0:
         # step 1: flip edges
         add_copy = (~add_copy.astype('bool')).astype('int')
         # step 2: zero diagonal and lower triangle
         np.fill_diagonal(add_copy, 0)
         absent_edges = np.argwhere(np.triu(add_copy))
+        if add_only_uncorr:
+            absent_edges = filter_pairs(absent_edges, is_correlated)
 
         np.random.shuffle(absent_edges)
         num_to_add = int(absent_edges.shape[0] * add_frac)
-        print(num_to_add)
         to_add = absent_edges[:num_to_add, :]
 
         adj_matrix[to_add.T[0, :], to_add.T[1, :]] = 1

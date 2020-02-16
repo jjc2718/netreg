@@ -32,6 +32,7 @@ from tcga_util import (
 
 p = argparse.ArgumentParser()
 p.add_argument('--add_frac', type=float, default=0.0)
+p.add_argument('--add_only_uncorr', action='store_true')
 p.add_argument('--gpu', action='store_true',
                help='If flag is included, run PyTorch models on GPU')
 p.add_argument('--noise_stdev', type=float, default=0.0)
@@ -130,7 +131,7 @@ X, betas, y, is_correlated, adj_matrix, network_groups = snet.simulate_network_r
         args.num_samples, args.num_features, args.uncorr_frac,
         args.num_networks, noise_stdev=args.noise_stdev, seed=args.seed,
         add_frac=args.add_frac, remove_frac=args.remove_frac,
-        verbose=args.verbose)
+        add_only_uncorr=args.add_only_uncorr, verbose=args.verbose)
 
 # split simulated data into train/test sets (and optionally tune set)
 X_train, X_test, y_train, y_test = train_test_split(

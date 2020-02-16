@@ -9,7 +9,7 @@ networks_dir = os.path.join(cfg.repo_root, 'simdata', 'sim_networks')
 
 def run_benchmark_script(n, p, noise_stdev, uncorr_frac, add_frac,
                          remove_frac, seed, results_dir, gpu=False,
-                         ignore_network=False):
+                         add_only_uncorr=False, ignore_network=False):
 
     num_networks = (p // 5) + 1
     script_args = [
@@ -39,6 +39,7 @@ def run_benchmark_script(n, p, noise_stdev, uncorr_frac, add_frac,
 
 def parse_args():
     p = argparse.ArgumentParser()
+    p.add_argument('--add_only_uncorr', action='store_true')
     p.add_argument('--gpu', action='store_true')
     p.add_argument('--ignore_network', action='store_true')
     return p.parse_args()
@@ -51,7 +52,7 @@ if __name__ == '__main__':
     # run script with given parameters
     data_dims = [
        #(n, p)
-       # (100, 10),
+       (100, 10),
        (100, 100),
        (100, 1000),
        # (500, 10),
@@ -62,15 +63,15 @@ if __name__ == '__main__':
        # (1000, 1000)
     ]
     noise_stdev = 0.1
-    uncorr_fracs = [0.0, 0.5]
-    add_fracs = [0.01, 0.03, 0.05, 0.07, 0.09]
-    remove_fracs = [0.0]
+    uncorr_fracs = [0.1, 0.25, 0.5]
+    add_fracs = [0.01, 0.03, 0.05, 0.07, 0.09, 0.1]
+    remove_fracs = [0.0, 0.1, 0.2, 0.5, 0.75, 0.9]
     # remove_fracs = [0.6, 0.75, 0.9, 0.95]
 
     results_dir = os.path.join(cfg.repo_root,
                                'simdata',
                                'results',
-                               'network_noise_results')
+                               'network_noise_uncorr')
 
     for (n, p) in data_dims:
         for uncorr_frac in uncorr_fracs:
@@ -80,4 +81,6 @@ if __name__ == '__main__':
                         run_benchmark_script(n, p, noise_stdev, uncorr_frac,
                                              add_frac, remove_frac, seed,
                                              results_dir, gpu=args.gpu,
+                                             add_only_uncorr=args.add_only_uncorr,
                                              ignore_network=args.ignore_network)
+
