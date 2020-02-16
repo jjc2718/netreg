@@ -7,8 +7,9 @@ import config as cfg
 
 networks_dir = os.path.join(cfg.repo_root, 'simdata', 'sim_networks')
 
-def run_benchmark_script(n, p, noise_stdev, uncorr_frac, seed,
-                         results_dir, gpu=False, ignore_network=False):
+def run_benchmark_script(n, p, noise_stdev, uncorr_frac, add_frac,
+                         remove_frac, seed, results_dir, gpu=False,
+                         ignore_network=False):
 
     num_networks = (p // 5) + 1
     script_args = [
@@ -21,6 +22,8 @@ def run_benchmark_script(n, p, noise_stdev, uncorr_frac, seed,
         '--num_features', str(p),
         '--noise_stdev', str(noise_stdev),
         '--uncorr_frac', str(uncorr_frac),
+        '--add_frac', str(add_frac),
+        '--remove_frac', str(remove_frac),
         '--num_networks', str(num_networks),
         '--seed', str(seed),
         '--verbose'
@@ -49,28 +52,32 @@ if __name__ == '__main__':
     data_dims = [
        #(n, p)
        # (100, 10),
-       # (100, 100),
-       # (100, 1000),
-       (500, 10),
-       (500, 100),
-       (500, 1000),
+       (100, 100),
+       (100, 1000),
+       # (500, 10),
+       # (500, 100),
+       # (500, 1000),
        # (1000, 10),
        # (1000, 100),
        # (1000, 1000)
     ]
-    noise_stdevs = [0, 0.1, 1, 10]
-    fracs = [0, 0.25, 0.5, 0.75, 1.0]
+    noise_stdev = 0.1
+    uncorr_fracs = [0.0, 0.5]
+    add_fracs = [0.01, 0.03, 0.05, 0.07, 0.09]
+    remove_fracs = [0.0]
+    # remove_fracs = [0.6, 0.75, 0.9, 0.95]
 
-    if args.ignore_network:
-        results_dir = os.path.join(cfg.repo_root, 'simdata', 'param_search_results', 'ignore_network')
-    else:
-        # results_dir = os.path.join(cfg.repo_root, 'simdata', 'param_search_results')
-        results_dir = os.path.join(cfg.repo_root, 'test_benchmark')
+    results_dir = os.path.join(cfg.repo_root,
+                               'simdata',
+                               'results',
+                               'network_noise_results')
 
     for (n, p) in data_dims:
-        for noise_stdev in noise_stdevs:
-            for uncorr_frac in fracs:
-                for seed in range(5):
-                    run_benchmark_script(n, p, noise_stdev, uncorr_frac, seed,
-                                         results_dir, gpu=args.gpu,
-                                         ignore_network=args.ignore_network)
+        for uncorr_frac in uncorr_fracs:
+            for add_frac in add_fracs:
+                for remove_frac in remove_fracs:
+                    for seed in range(5):
+                        run_benchmark_script(n, p, noise_stdev, uncorr_frac,
+                                             add_frac, remove_frac, seed,
+                                             results_dir, gpu=args.gpu,
+                                             ignore_network=args.ignore_network)

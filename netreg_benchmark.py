@@ -31,20 +31,22 @@ from tcga_util import (
 )
 
 p = argparse.ArgumentParser()
+p.add_argument('--add_frac', type=float, default=0.0)
 p.add_argument('--gpu', action='store_true',
                help='If flag is included, run PyTorch models on GPU')
+p.add_argument('--noise_stdev', type=float, default=0.0)
 p.add_argument('--num_features', type=int, default=10)
 p.add_argument('--num_networks', type=int, default=2)
 p.add_argument('--num_samples', type=int, default=100)
 p.add_argument('--plot_learning_curves', default=None,
                help='If flag is included, plot learning curves and save\
                      them to this directory')
+p.add_argument('--remove_frac', type=float, default=0.0)
 p.add_argument('--results_dir',
                default=cfg.repo_root.joinpath('pytorch_results').resolve(),
                help='Directory to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
 p.add_argument('--uncorr_frac', type=float, default=0.5)
-p.add_argument('--noise_stdev', type=float, default=0)
 p.add_argument('--verbose', action='store_true')
 
 prms = p.add_argument_group('pytorch_params')
@@ -127,6 +129,7 @@ cv_results = {
 X, betas, y, is_correlated, adj_matrix, network_groups = snet.simulate_network_reg(
         args.num_samples, args.num_features, args.uncorr_frac,
         args.num_networks, noise_stdev=args.noise_stdev, seed=args.seed,
+        add_frac=args.add_frac, remove_frac=args.remove_frac,
         verbose=args.verbose)
 
 # split simulated data into train/test sets (and optionally tune set)
@@ -158,10 +161,11 @@ if not os.path.exists(args.networks_dir):
     os.makedirs(args.networks_dir)
 
 network_filename = os.path.join(args.networks_dir,
-                                'sim_groups_p{}_e{}_u{}_s{}.tsv'.format(
+                                'sim_groups_p{}_u{}_a{}_r{}_s{}.tsv'.format(
                                     args.num_features,
-                                    args.noise_stdev,
                                     args.uncorr_frac,
+                                    args.add_frac,
+                                    args.remove_frac,
                                     args.seed))
 
 if not os.path.exists(network_filename):
@@ -271,10 +275,10 @@ if args.plot_learning_curves is not None:
     plt.ylabel('Metric')
     plt.legend()
     plt.savefig(os.path.join(args.plot_learning_curves,
-                             'lc_n{}_p{}_e{}_u{}_s{}.pdf'.format(
+                             'lc_n{}_p{}_u{}_a{}_r{}_s{}.pdf'.format(
                                args.num_samples, args.num_features,
-                               args.noise_stdev, args.uncorr_frac,
-                               args.seed)))
+                               args.uncorr_frac, args.add_frac,
+                               args.remove_frac, args.seed)))
 
 ###########################################################
 # R (netReg) MODEL
@@ -460,25 +464,25 @@ if hasattr(torch_model, 'results_df'):
                                                    args.seed)), sep='\t')
 
 cv_results_file = os.path.join(args.results_dir,
-                               'cv_results_n{}_p{}_e{}_u{}_s{}.pkl'.format(
+                               'cv_results_n{}_p{}_u{}_a{}_r{}_s{}.pkl'.format(
                                    args.num_samples, args.num_features,
-                                   args.noise_stdev, args.uncorr_frac,
-                                   args.seed))
+                                   args.uncorr_frac, args.add_frac,
+                                   args.remove_frac, args.seed))
 true_coef_file = os.path.join(args.results_dir,
-                              'true_coefs_n{}_p{}_e{}_u{}_s{}.txt'.format(
-                                  args.num_samples, args.num_features,
-                                  args.noise_stdev, args.uncorr_frac,
-                                  args.seed))
+                              'true_coefs_n{}_p{}_u{}_a{}_r{}_s{}.txt'.format(
+                                   args.num_samples, args.num_features,
+                                   args.uncorr_frac, args.add_frac,
+                                   args.remove_frac, args.seed))
 torch_coef_file = os.path.join(args.results_dir,
-                               'torch_coefs_n{}_p{}_e{}_u{}_s{}.txt'.format(
+                               'torch_coefs_n{}_p{}_u{}_a{}_r{}_s{}.txt'.format(
                                    args.num_samples, args.num_features,
-                                   args.noise_stdev, args.uncorr_frac,
-                                   args.seed))
+                                   args.uncorr_frac, args.add_frac,
+                                   args.remove_frac, args.seed))
 sklearn_coef_file = os.path.join(args.results_dir,
-                                 'sklearn_coefs_n{}_p{}_e{}_u{}_s{}.txt'.format(
+                                 'sklearn_coefs_n{}_p{}_u{}_a{}_r{}_s{}.txt'.format(
                                    args.num_samples, args.num_features,
-                                   args.noise_stdev, args.uncorr_frac,
-                                   args.seed))
+                                   args.uncorr_frac, args.add_frac,
+                                   args.remove_frac, args.seed))
 
 with open(cv_results_file, 'wb') as f:
     pkl.dump(cv_results, f)
