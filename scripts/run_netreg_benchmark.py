@@ -28,6 +28,8 @@ def run_benchmark_script(n, p, noise_stdev, uncorr_frac, add_frac,
         '--seed', str(seed),
         '--verbose'
     ]
+    if add_only_uncorr:
+        script_args.append('--add_only_uncorr')
     if gpu:
         script_args.append('--gpu')
     if ignore_network:
@@ -64,9 +66,8 @@ if __name__ == '__main__':
     ]
     noise_stdev = 0.1
     uncorr_fracs = [0.1, 0.25, 0.5]
-    add_fracs = [0.01, 0.03, 0.05, 0.07, 0.09, 0.1]
+    add_fracs = [0.0, 0.01, 0.03, 0.05, 0.07, 0.09, 0.1]
     remove_fracs = [0.0, 0.1, 0.2, 0.5, 0.75, 0.9]
-    # remove_fracs = [0.6, 0.75, 0.9, 0.95]
 
     results_dir = os.path.join(cfg.repo_root,
                                'simdata',
@@ -76,8 +77,28 @@ if __name__ == '__main__':
     for (n, p) in data_dims:
         for uncorr_frac in uncorr_fracs:
             for add_frac in add_fracs:
-                for remove_frac in remove_fracs:
-                    for seed in range(5):
+                remove_frac = 0.0
+                for seed in range(5):
+                    if add_frac == 0.0:
+                        run_benchmark_script(n, p, noise_stdev, uncorr_frac,
+                                             add_frac, remove_frac, seed,
+                                             results_dir, gpu=args.gpu,
+                                             ignore_network=args.ignore_network)
+                    else:
+                        run_benchmark_script(n, p, noise_stdev, uncorr_frac,
+                                             add_frac, remove_frac, seed,
+                                             results_dir, gpu=args.gpu,
+                                             add_only_uncorr=args.add_only_uncorr,
+                                             ignore_network=args.ignore_network)
+            for remove_frac in remove_fracs:
+                add_frac = 0.0
+                for seed in range(5):
+                    if remove_frac == 0.0:
+                        run_benchmark_script(n, p, noise_stdev, uncorr_frac,
+                                             add_frac, remove_frac, seed,
+                                             results_dir, gpu=args.gpu,
+                                             ignore_network=args.ignore_network)
+                    else:
                         run_benchmark_script(n, p, noise_stdev, uncorr_frac,
                                              add_frac, remove_frac, seed,
                                              results_dir, gpu=args.gpu,

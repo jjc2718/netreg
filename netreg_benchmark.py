@@ -231,6 +231,13 @@ sorted_df = (
 )
 best_ix = sorted_df.loc[0, 'param_set']
 best_params = {k: [v[best_ix]] for k, v in params_map.items()}
+best_params_file = os.path.join(args.results_dir,
+                               'best_params_n{}_p{}_u{}_a{}_r{}_s{}.pkl'.format(
+                                   args.num_samples, args.num_features,
+                                   args.uncorr_frac, args.add_frac,
+                                   args.remove_frac, args.seed))
+with open(best_params_file, 'wb') as f:
+    pkl.dump(best_params, f)
 
 # train/evaluate model with best params
 torch_model = TorchLR(best_params,
