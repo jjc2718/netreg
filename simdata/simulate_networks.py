@@ -127,6 +127,7 @@ def simulate_network_reg(n,
                          add_frac=0,
                          remove_frac=0,
                          add_only_uncorr=False,
+                         add_single_edge=False,
                          verbose=False):
     """Simulate data from a linear model with network collinearity.
 
@@ -168,7 +169,7 @@ def simulate_network_reg(n,
             adj_matrix[j, i] = 1
 
     # add/remove edges from network if necessary
-    if add_frac != 0 or remove_frac != 0:
+    if add_single_edge or add_frac != 0 or remove_frac != 0:
         add_copy = adj_matrix.copy()
         remove_copy = adj_matrix.copy()
 
@@ -185,7 +186,7 @@ def simulate_network_reg(n,
         return np.array(pairs)
 
     # if necessary, add add_frac percent of the possible spurious edges
-    if add_frac != 0:
+    if add_single_edge or add_frac != 0:
 
         # start by getting all of the possible edges absent in the
         # original network
@@ -201,7 +202,10 @@ def simulate_network_reg(n,
 
         # then choose some at random and add them to adj_matrix
         np.random.shuffle(absent_edges)
-        num_to_add = int(absent_edges.shape[0] * add_frac)
+        if add_single_edge:
+            num_to_add = 1
+        else:
+            num_to_add = int(absent_edges.shape[0] * add_frac)
         to_add = absent_edges[:num_to_add, :]
 
         adj_matrix[to_add.T[0, :], to_add.T[1, :]] = 1
