@@ -1,4 +1,4 @@
-name: netreg
+name: netscape
 channels:
   - r
   - conda-forge

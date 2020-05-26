@@ -17,12 +17,12 @@ We recommend using the conda environment specified in the `environment.yml` file
 # conda version 4.5.0
 conda env create --file environment.yml
 
-conda activate netreg
+conda activate netscape
 ```
 
 To run PLIER, you'll have to install it from GitHub using the
 `devtools` library. Run the following from an R interactive shell/
-REPL inside the `netreg` Conda environment:
+REPL inside the `netscape` Conda environment:
 
 ```R
 library(devtools)
