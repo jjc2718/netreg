@@ -25,7 +25,9 @@ run_gelnet <- function(args) {
                   P=G.X,
                   l1=args$l1_penalty,
                   l2=args$network_penalty,
-                  max.iter=args$num_epochs)
+                  max.iter=args$num_epochs,
+                  eps=1e-08,
+                  silent=T)
 
     # make predictions on test data
     y_pred_train <- X_train %*% fit$w + fit$b
