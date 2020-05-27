@@ -49,6 +49,7 @@ p.add_argument('--uncorr_frac', type=float, default=0.5)
 p.add_argument('--verbose', action='store_true')
 
 prms = p.add_argument_group('model_params')
+prms.add_argument('--param_search', action='store_true')
 prms.add_argument('--l1_penalty', type=float, default=0.1,
                   help='L1 penalty multiplier for PyTorch logistic regression')
 prms.add_argument('--num_epochs', type=int, default=100,
@@ -186,6 +187,10 @@ r_args = [
     '--network_penalty', str(args.network_penalty),
     '--num_epochs', str(args.num_epochs)
 ]
+if args.param_search:
+    # note: this overrides l1 penalty and network penalty
+    # (see scripts/run_gelnet.R)
+    r_args.append('--cv')
 if args.verbose:
     r_args.append('--verbose')
     logger.info('Running: {}'.format(' '.join(r_args)))
@@ -256,7 +261,7 @@ test_data.close()
 train_labels.close()
 test_labels.close()
 
-# Fit R model on training set an# test on held out data
+# Fit R model on training set and test on held out data
 r_args = [
     'Rscript',
     os.path.join(cfg.scripts_dir, 'run_gelnet.R'),
@@ -276,6 +281,10 @@ r_args = [
     '--num_epochs', str(args.num_epochs),
     '--ignore_network'
 ]
+if args.param_search:
+    # note: this overrides l1 penalty and network penalty
+    # (see scripts/run_gelnet.R)
+    r_args.append('--cv')
 if args.verbose:
     r_args.append('--verbose')
     logger.info('Running: {}'.format(' '.join(r_args)))

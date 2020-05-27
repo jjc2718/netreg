@@ -9,8 +9,9 @@ run_gelnet <- function(args) {
     # extensive use, should implement to resolve network edges)
     X_train <- as.matrix(read.csv(args$train_data, sep='\t', header=F))
     X_test <- as.matrix(read.csv(args$test_data, sep='\t', header=F))
-    y_train <- as.matrix(read.csv(args$train_labels, header=F))
-    y_test <- as.matrix(read.csv(args$test_labels, header=F))
+    # gelnet expects these to be vectors rather than matrices
+    y_train <- read.csv(args$train_labels, header=F)$V1
+    y_test <- read.csv(args$test_labels, header=F)$V1
 
     if (args$ignore_network) {
         # if ignore flag is provided, just use identity matrix
@@ -26,14 +27,33 @@ run_gelnet <- function(args) {
     colnames(G.X) <- colnames(X_train)
 
     # train on training data
-    fit <- gelnet(X=X_train,
-                  y=y_train,
-                  P=G.X,
-                  l1=args$l1_penalty,
-                  l2=args$network_penalty,
-                  max.iter=args$num_epochs,
-                  eps=1e-08,
-                  silent=!args$verbose)
+    # cv option overrides hardcoded penalty options
+    if (args$cv) {
+        cv_choices <- 20
+        if (!args$verbose) {
+            # silent option doesn't work for CV so send output to /dev/null
+            sink('/dev/null')
+        }
+        fit <- gelnet.cv(X=X_train,
+                         y=y_train,
+                         nL1=cv_choices,
+                         nL2=cv_choices,
+                         P=G.X,
+                         max.iter=args$num_epochs,
+                         eps=1e-08)
+        if (!args$verbose) {
+            sink()
+        }
+    } else {
+        fit <- gelnet(X=X_train,
+                      y=y_train,
+                      P=G.X,
+                      l1=args$l1_penalty,
+                      l2=args$network_penalty,
+                      max.iter=args$num_epochs,
+                      eps=1e-08,
+                      silent=!args$verbose)
+    }
 
     # make predictions on test data
     y_pred_train <- X_train %*% fit$w + fit$b
@@ -104,6 +124,7 @@ main <- function() {
     # parameters for network-regularized regression model
     parser$add_argument('--l1_penalty', type='double', default=1)
     parser$add_argument('--network_penalty', type='double', default=1)
+    parser$add_argument('--cv', action='store_true')
     parser$add_argument('--num_epochs', type='integer', default=100)
     parser$add_argument('--ignore_network', action='store_true')
 

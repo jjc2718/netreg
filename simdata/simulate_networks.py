@@ -219,9 +219,7 @@ def simulate_network_reg(n,
         # then choose some at random and remove them from adj_matrix
         np.random.shuffle(present_edges)
         num_to_remove = int(present_edges.shape[0] * remove_frac)
-        print(num_to_remove)
         to_remove = present_edges[:num_to_remove, :]
-        print(to_remove)
 
         adj_matrix[to_remove.T[0, :], to_remove.T[1, :]] = 0
         adj_matrix[to_remove.T[1, :], to_remove.T[0, :]] = 0
