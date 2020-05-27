@@ -91,9 +91,13 @@ cv_results = {
     'r_test_rmse': [],
     'r_train_r2': [],
     'r_test_r2': [],
+    'r_nn_train_rmse': [],
+    'r_nn_test_rmse': [],
+    'r_nn_train_r2': [],
+    'r_nn_test_r2': [],
     'sklearn_train_rmse': [],
-    'sklearn_train_r2': [],
     'sklearn_test_rmse': [],
+    'sklearn_train_r2': [],
     'sklearn_test_r2': []
 }
 
@@ -138,7 +142,7 @@ if not os.path.exists(network_filename):
                           network_filename)
 
 ###########################################################
-# R (netReg) MODEL
+# R (GELnet) MODEL
 ###########################################################
 
 # generate tempfiles for train/test data, to pass to R script
@@ -227,6 +231,96 @@ cv_results['r_test_rmse'].append(r_test_rmse)
 cv_results['r_test_r2'].append(r_test_r2)
 
 ###########################################################
+# R (GELnet) MODEL, NO NETWORK
+###########################################################
+
+# generate tempfiles for train/test data, to pass to R script
+train_data = tempfile.NamedTemporaryFile(mode='w', delete=False)
+test_data = tempfile.NamedTemporaryFile(mode='w', delete=False)
+train_labels = tempfile.NamedTemporaryFile(mode='w', delete=False)
+test_labels = tempfile.NamedTemporaryFile(mode='w', delete=False)
+np.savetxt(train_data, X_train, fmt='%.5f', delimiter='\t')
+np.savetxt(test_data, X_test, fmt='%.5f', delimiter='\t')
+np.savetxt(train_labels, y_train, fmt='%i')
+np.savetxt(test_labels, y_test, fmt='%i')
+Filenames = namedtuple('Filenames', ['train_data', 'test_data',
+                                     'train_labels', 'test_labels'])
+fnames = Filenames(
+    train_data=train_data.name,
+    test_data=test_data.name,
+    train_labels=train_labels.name,
+    test_labels=test_labels.name
+)
+train_data.close()
+test_data.close()
+train_labels.close()
+test_labels.close()
+
+# Fit R model on training set an# test on held out data
+r_args = [
+    'Rscript',
+    os.path.join(cfg.scripts_dir, 'run_gelnet.R'),
+    '--train_data', fnames.train_data,
+    '--test_data', fnames.test_data,
+    '--train_labels', fnames.train_labels,
+    '--test_labels', fnames.test_labels,
+    '--network_file', network_filename,
+    '--num_samples', str(args.num_samples),
+    '--num_features', str(args.num_features),
+    '--noise_stdev', str(args.noise_stdev),
+    '--uncorr_frac', str(args.uncorr_frac),
+    '--results_dir', args.results_dir,
+    '--seed', str(args.seed),
+    '--l1_penalty', str(args.l1_penalty),
+    '--network_penalty', str(args.network_penalty),
+    '--num_epochs', str(args.num_epochs),
+    '--ignore_network'
+]
+if args.verbose:
+    r_args.append('--verbose')
+    logger.info('Running: {}'.format(' '.join(r_args)))
+
+r_env = os.environ.copy()
+r_env['MKL_THREADING_LAYER'] = 'GNU'
+subprocess.check_call(r_args, env=r_env)
+
+# clean up temp files
+for fname in fnames:
+    os.remove(fname)
+
+r_nn_pred_train = np.loadtxt(
+    os.path.join(args.results_dir,
+                 'r_nn_preds_train_n{}_p{}_e{}_u{}_s{}.txt'.format(
+                     args.num_samples, args.num_features,
+                     args.noise_stdev, args.uncorr_frac,
+                     args.seed)),
+    delimiter='\t')
+r_nn_pred_test = np.loadtxt(
+    os.path.join(args.results_dir,
+                 'r_nn_preds_test_n{}_p{}_e{}_u{}_s{}.txt'.format(
+                     args.num_samples, args.num_features,
+                     args.noise_stdev, args.uncorr_frac,
+                     args.seed)),
+    delimiter='\t')
+
+# get binary predictions
+r_nn_pred_bn_train = (r_nn_pred_train > 0.5).astype('int')
+r_nn_pred_bn_test = (r_nn_pred_test > 0.5).astype('int')
+
+# Calculate performance metrics
+r_nn_train_mse = mean_squared_error(y_train, r_nn_pred_train)
+r_nn_train_rmse = np.sqrt(r_nn_train_mse)
+r_nn_train_r2 = r2_score(y_train, r_nn_pred_train)
+r_nn_test_mse = mean_squared_error(y_test, r_nn_pred_test)
+r_nn_test_rmse = np.sqrt(r_nn_test_mse)
+r_nn_test_r2 = r2_score(y_test, r_nn_pred_test)
+
+cv_results['r_nn_train_rmse'].append(r_nn_train_rmse)
+cv_results['r_nn_train_r2'].append(r_nn_train_r2)
+cv_results['r_nn_test_rmse'].append(r_nn_test_rmse)
+cv_results['r_nn_test_r2'].append(r_nn_test_r2)
+
+###########################################################
 # SCIKIT-LEARN MODEL (BASELINE)
 ###########################################################
 
@@ -282,5 +376,6 @@ with open(cv_results_file, 'wb') as f:
 np.savetxt(true_coef_file, betas, fmt='%.5f', delimiter='\t')
 np.savetxt(sklearn_coef_file, s_coef, fmt='%.5f', delimiter='\t')
 
-print(cv_results)
+for n, v in cv_results.items():
+    print('{}\t{:.6f}'.format(n, v[0]))
 

@@ -12,9 +12,15 @@ run_gelnet <- function(args) {
     y_train <- as.matrix(read.csv(args$train_labels, header=F))
     y_test <- as.matrix(read.csv(args$test_labels, header=F))
 
-    # convert edge list to adjacency matrix
-    G <- read_graph(args$network_file, format="ncol")
-    G.X <- adj2nlapl(as_adjacency_matrix(G, sparse=F))
+    if (args$ignore_network) {
+        # if ignore flag is provided, just use identity matrix
+        # (i.e. standard L2 penalty)
+        G.X <- diag(ncol(X_train))
+    } else {
+        # convert edge list to adjacency matrix
+        G <- read_graph(args$network_file, format="ncol")
+        G.X <- adj2nlapl(as_adjacency_matrix(G, sparse=F))
+    }
     # copy feature names from training data to adjacency matrix
     rownames(G.X) <- colnames(X_train)
     colnames(G.X) <- colnames(X_train)
@@ -27,7 +33,7 @@ run_gelnet <- function(args) {
                   l2=args$network_penalty,
                   max.iter=args$num_epochs,
                   eps=1e-08,
-                  silent=T)
+                  silent=!args$verbose)
 
     # make predictions on test data
     y_pred_train <- X_train %*% fit$w + fit$b
@@ -35,24 +41,45 @@ run_gelnet <- function(args) {
     coefs = c(fit$b, fit$w)
 
     # write predictions and coefficients to results_dir
-    write.table(format(round(y_pred_train, 5), nsmall=5),
-                file=paste0(args$results_dir, '/r_preds_train_n',
-                            args$num_samples, '_p', args$num_features,
-                            '_e', args$noise_stdev, '_u', args$uncorr_frac,
-                            '_s', args$seed, '.txt'),
-                quote=F, sep='\t', row.names=F, col.names=F)
-    write.table(format(round(y_pred_test, 5), nsmall=5),
-                file=paste0(args$results_dir, '/r_preds_test_n',
-                            args$num_samples, '_p', args$num_features,
-                            '_e', args$noise_stdev, '_u', args$uncorr_frac,
-                            '_s', args$seed, '.txt'),
-                quote=F, sep='\t', row.names=F, col.names=F)
-    write.table(format(round(coefs, 5), nsmall=5),
-                file=paste0(args$results_dir, '/r_coefs_n',
-                            args$num_samples, '_p', args$num_features,
-                            '_e', args$noise_stdev, '_u', args$uncorr_frac,
-                            '_s', args$seed, '.txt'),
-                quote=F, sep='\t', row.names=F, col.names=F)
+    if (args$ignore_network) {
+        write.table(format(round(y_pred_train, 5), nsmall=5),
+                    file=paste0(args$results_dir, '/r_nn_preds_train_n',
+                                args$num_samples, '_p', args$num_features,
+                                '_e', args$noise_stdev, '_u', args$uncorr_frac,
+                                '_s', args$seed, '.txt'),
+                    quote=F, sep='\t', row.names=F, col.names=F)
+        write.table(format(round(y_pred_test, 5), nsmall=5),
+                    file=paste0(args$results_dir, '/r_nn_preds_test_n',
+                                args$num_samples, '_p', args$num_features,
+                                '_e', args$noise_stdev, '_u', args$uncorr_frac,
+                                '_s', args$seed, '.txt'),
+                    quote=F, sep='\t', row.names=F, col.names=F)
+        write.table(format(round(coefs, 5), nsmall=5),
+                    file=paste0(args$results_dir, '/r_nn_coefs_n',
+                                args$num_samples, '_p', args$num_features,
+                                '_e', args$noise_stdev, '_u', args$uncorr_frac,
+                                '_s', args$seed, '.txt'),
+                    quote=F, sep='\t', row.names=F, col.names=F)
+    } else {
+        write.table(format(round(y_pred_train, 5), nsmall=5),
+                    file=paste0(args$results_dir, '/r_preds_train_n',
+                                args$num_samples, '_p', args$num_features,
+                                '_e', args$noise_stdev, '_u', args$uncorr_frac,
+                                '_s', args$seed, '.txt'),
+                    quote=F, sep='\t', row.names=F, col.names=F)
+        write.table(format(round(y_pred_test, 5), nsmall=5),
+                    file=paste0(args$results_dir, '/r_preds_test_n',
+                                args$num_samples, '_p', args$num_features,
+                                '_e', args$noise_stdev, '_u', args$uncorr_frac,
+                                '_s', args$seed, '.txt'),
+                    quote=F, sep='\t', row.names=F, col.names=F)
+        write.table(format(round(coefs, 5), nsmall=5),
+                    file=paste0(args$results_dir, '/r_coefs_n',
+                                args$num_samples, '_p', args$num_features,
+                                '_e', args$noise_stdev, '_u', args$uncorr_frac,
+                                '_s', args$seed, '.txt'),
+                    quote=F, sep='\t', row.names=F, col.names=F)
+    }
 }
 
 main <- function() {
@@ -78,6 +105,7 @@ main <- function() {
     parser$add_argument('--l1_penalty', type='double', default=1)
     parser$add_argument('--network_penalty', type='double', default=1)
     parser$add_argument('--num_epochs', type='integer', default=100)
+    parser$add_argument('--ignore_network', action='store_true')
 
     args <- parser$parse_args()
     run_gelnet(args)
