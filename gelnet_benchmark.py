@@ -337,13 +337,52 @@ if args.verbose:
     logger.info('##### Running parameter search for scikit-learn model... #####')
 
 from sklearn.linear_model import SGDRegressor
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import GridSearchCV
 
-reg = SGDRegressor(max_iter=model_params['num_epochs'][0],
-                   learning_rate='constant',
-                   eta0=0.01,
-                   penalty='l1',
-                   alpha=model_params['l1_penalty'][0])
-reg.fit(X=X_train, y=y_train.flatten())
+if args.param_search:
+    reg_parameters = {
+        'regress__loss': ['squared_loss'],
+        'regress__penalty': ['elasticnet'],
+        'regress__alpha': cfg.alphas,
+        'regress__l1_ratio': cfg.l1_ratios,
+    }
+
+    estimator = Pipeline(
+        steps=[
+            (
+                'regress',
+                SGDRegressor(
+                    random_state=args.seed,
+                    max_iter=model_params['num_epochs'][0],
+                    tol=1e-3
+                ),
+            )
+        ]
+    )
+
+    cv_pipeline = GridSearchCV(
+        estimator=estimator,
+        param_grid=reg_parameters,
+        n_jobs=1,
+        cv=5,
+        scoring='neg_mean_squared_error',
+        return_train_score=True,
+    )
+
+    # Fit the model
+    cv_pipeline.fit(X=X_train, y=y_train.flatten())
+
+    # Obtain cross validation results
+    reg = cv_pipeline.best_estimator_.named_steps['regress']
+
+else:
+    reg = SGDRegressor(max_iter=model_params['num_epochs'][0],
+                       learning_rate='constant',
+                       eta0=0.01,
+                       penalty='l1',
+                       alpha=model_params['l1_penalty'][0])
+    reg.fit(X=X_train, y=y_train.flatten())
 sklearn_pred_train = reg.predict(X_train)
 sklearn_pred_test = reg.predict(X_test)
 
