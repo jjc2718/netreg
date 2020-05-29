@@ -65,6 +65,20 @@ def load_expression_data(subset_mad_genes=cfg.num_features_raw,
     return (rnaseq_train_df, rnaseq_test_df)
 
 
+def split_by_cancer_type(train_df, test_df, sample_info_df, holdout_cancer_type):
+    """words go here"""
+    expr_df = pd.concat((train_df, test_df))
+    train_sample_ids = (
+        sample_info_df.loc[~(sample_info_df.cancer_type == holdout_cancer_type)]
+        .sample_id
+    )
+    test_sample_ids = (
+        sample_info_df.loc[sample_info_df.cancer_type == holdout_cancer_type]
+        .sample_id
+    )
+    return (expr_df.loc[train_sample_ids, :], expr_df.loc[test_sample_ids, :])
+
+
 def load_top_50():
     """Load top 50 mutated genes in TCGA from BioBombe repo.
 
