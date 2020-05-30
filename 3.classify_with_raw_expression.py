@@ -154,6 +154,14 @@ for gene_idx, gene_series in genes_df.iterrows():
             x_train_raw_df = rnaseq_train_df
             x_test_raw_df = rnaseq_test_df
 
+        print(x_train_raw_df.shape)
+        print(x_test_raw_df.shape)
+        raw_df = pd.concat((x_train_raw_df, x_test_raw_df))
+        all_ids = raw_df.index
+        sample_info_df = pd.read_csv(cfg.sample_info, sep='\t')
+        all_cancer_types = np.unique(sample_info_df[sample_info_df.sample_id.isin(all_ids)].cancer_type.values)
+        print(all_cancer_types)
+
         # Now, perform all the analyses for each X matrix
         train_samples, x_train_df, y_train_df = align_matrices(
             x_file_or_df=x_train_raw_df, y=y_df
@@ -162,6 +170,13 @@ for gene_idx, gene_series in genes_df.iterrows():
         test_samples, x_test_df, y_test_df = align_matrices(
             x_file_or_df=x_test_raw_df, y=y_df
         )
+        print(x_train_df.shape)
+        print(x_test_df.shape)
+        processed_df = pd.concat((x_train_df, x_test_df))
+        all_ids = processed_df.index
+        processed_cancer_types = np.unique(sample_info_df[sample_info_df.sample_id.isin(all_ids)].cancer_type.values)
+        print(processed_cancer_types)
+        exit()
 
         # Train the model
         logging.debug(
