@@ -28,6 +28,11 @@ p = argparse.ArgumentParser()
 p.add_argument('--gene_list', nargs='*', default=None,
                help='<Optional> Provide a list of genes to run\
                      mutation classification for; default is all genes')
+p.add_argument('--holdout_cancer_type', type=str, default=None,
+               help='<Optional> If provided, test on the given cancer\
+                     type and train on all others. If not provided,\
+                     perform stratified CV as described in\
+                     0A.download_pancanatlas_data.ipynb')
 p.add_argument('--results_dir', default=cfg.results_dir,
                help='where to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
@@ -49,6 +54,14 @@ genes_df, pancan_data = du.load_raw_data(args.gene_list, verbose=args.verbose)
  mut_burden_df) = pancan_data
 
 rnaseq_train_df, rnaseq_test_df = du.load_expression_data(verbose=args.verbose)
+
+if args.holdout_cancer_type:
+    sample_info_df = pd.read_csv(cfg.sample_info, sep='\t')
+    assert args.holdout_cancer_type in np.unique(sample_info_df.cancer_type), \
+            'Holdout cancer type must be a valid TCGA cancer type identifier'
+    rnaseq_train_df, rnaseq_test_df = du.split_by_cancer_type(
+            rnaseq_train_df, rnaseq_test_df, sample_info_df,
+            args.holdout_cancer_type)
 
 # Track total metrics for each gene in one file
 metric_cols = [
@@ -140,6 +153,14 @@ for gene_idx, gene_series in genes_df.iterrows():
             x_train_raw_df = rnaseq_train_df
             x_test_raw_df = rnaseq_test_df
 
+        print(x_train_raw_df.shape)
+        print(x_test_raw_df.shape)
+        raw_df = pd.concat((x_train_raw_df, x_test_raw_df))
+        all_ids = raw_df.index
+        sample_info_df = pd.read_csv(cfg.sample_info, sep='\t')
+        all_cancer_types = np.unique(sample_info_df[sample_info_df.sample_id.isin(all_ids)].cancer_type.values)
+        print(all_cancer_types)
+
         # Now, perform all the analyses for each X matrix
         train_samples, x_train_df, y_train_df = align_matrices(
             x_file_or_df=x_train_raw_df, y=y_df
@@ -148,6 +169,16 @@ for gene_idx, gene_series in genes_df.iterrows():
         test_samples, x_test_df, y_test_df = align_matrices(
             x_file_or_df=x_test_raw_df, y=y_df
         )
+        print(x_train_df.shape)
+        print(x_test_df.shape)
+        processed_df = pd.concat((x_train_df, x_test_df))
+        all_ids = processed_df.index
+        processed_info = sample_info_df[sample_info_df.sample_id.isin(all_ids)]
+        processed_cancer_types = np.unique(processed_info.cancer_type.values)
+        print(processed_cancer_types)
+        type_counts = processed_info.groupby('cancer_type').agg('count')
+        print(type_counts)
+        exit()
 
         # Train the model
         logging.debug(
