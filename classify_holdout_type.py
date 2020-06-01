@@ -14,7 +14,6 @@ import pandas as pd
 import config as cfg
 from tcga_util import (
     get_threshold_metrics,
-    summarize_results,
     extract_coefficients,
     align_matrices,
     process_y_matrix,
@@ -24,17 +23,64 @@ from tcga_util import (
 )
 import utilities.data_utilities as du
 
+def summarize_results(results, gene, holdout_cancer_type, signal, z_dim,
+                      seed, algorithm, data_type):
+    """
+    Given an input results file, summarize and output all pertinent files
+
+    Arguments:
+    results - a results object output from `get_threshold_metrics`
+    gene - the gene being predicted
+    holdout_cancer_type - the cancer type being used as holdout data
+    signal - the signal of interest
+    z_dim - the internal bottleneck dimension of the compression model
+    seed - the seed used to compress the data
+    algorithm - the algorithm used to compress the data
+    data_type - the type of data (either training, testing, or cv)
+    """
+
+    results_append_list = [
+        gene,
+        holdout_cancer_type,
+        signal,
+        z_dim,
+        seed,
+        algorithm,
+        data_type,
+    ]
+
+    metrics_out_ = [results["auroc"], results["aupr"]] + results_append_list
+
+    roc_df_ = results["roc_df"]
+    pr_df_ = results["pr_df"]
+
+    roc_df_ = roc_df_.assign(
+        predictor=gene,
+        signal=signal,
+        z_dim=z_dim,
+        seed=seed,
+        algorithm=algorithm,
+        data_type=data_type,
+    )
+
+    pr_df_ = pr_df_.assign(
+        predictor=gene,
+        signal=signal,
+        z_dim=z_dim,
+        seed=seed,
+        algorithm=algorithm,
+        data_type=data_type,
+    )
+
+    return metrics_out_, roc_df_, pr_df_
+
 p = argparse.ArgumentParser()
-p.add_argument('--gene_list', nargs='*', default=None,
-               help='<Optional> Provide a list of genes to run\
-                     mutation classification for; default is all genes')
+p.add_argument('--gene', type=str, default=None,
+               help='Provide a gene to run mutation classification for.')
 p.add_argument('--holdout_cancer_type', type=str, default=None,
-               help='<Optional> If provided, test on the given cancer\
-                     type and train on all others. If not provided,\
-                     perform stratified CV as described in\
-                     0A.download_pancanatlas_data.ipynb')
+               help='Provide a cancer type to hold out; train on all others.')
 p.add_argument('--results_dir', default=cfg.results_dir,
-               help='where to write results to')
+               help='Where to write results to')
 p.add_argument('--seed', type=int, default=cfg.default_seed)
 p.add_argument('--verbose', action='store_true')
 args = p.parse_args()
@@ -45,7 +91,7 @@ if args.verbose:
 np.random.seed(args.seed)
 algorithm = "raw"
 
-genes_df, pancan_data = du.load_raw_data(args.gene_list, verbose=args.verbose)
+genes_df, pancan_data = du.load_raw_data([args.gene], verbose=args.verbose)
 
 (sample_freeze_df,
  mutation_df,
@@ -67,7 +113,8 @@ if args.holdout_cancer_type:
 metric_cols = [
     "auroc",
     "aupr",
-    "gene_or_cancertype",
+    "gene",
+    "holdout_cancer_type",
     "signal",
     "z_dim",
     "seed",
@@ -155,30 +202,41 @@ for gene_idx, gene_series in genes_df.iterrows():
 
         print(x_train_raw_df.shape)
         print(x_test_raw_df.shape)
-        raw_df = pd.concat((x_train_raw_df, x_test_raw_df))
-        all_ids = raw_df.index
-        sample_info_df = pd.read_csv(cfg.sample_info, sep='\t')
-        all_cancer_types = np.unique(sample_info_df[sample_info_df.sample_id.isin(all_ids)].cancer_type.values)
-        print(all_cancer_types)
+        # raw_df = pd.concat((x_train_raw_df, x_test_raw_df))
+        # all_ids = raw_df.index
+        # sample_info_df = pd.read_csv(cfg.sample_info, sep='\t')
+        # all_cancer_types = np.unique(sample_info_df[sample_info_df.sample_id.isin(all_ids)].cancer_type.values)
+        # print(all_cancer_types)
 
         # Now, perform all the analyses for each X matrix
+        # there's no reason to add cancer type as a covariate since test set
+        # cancer types aren't present in training set
         train_samples, x_train_df, y_train_df = align_matrices(
-            x_file_or_df=x_train_raw_df, y=y_df
+            x_file_or_df=x_train_raw_df, y=y_df, add_cancertype_covariate=False
         )
 
-        test_samples, x_test_df, y_test_df = align_matrices(
-            x_file_or_df=x_test_raw_df, y=y_df
-        )
+        try:
+            test_samples, x_test_df, y_test_df = align_matrices(
+                x_file_or_df=x_test_raw_df, y=y_df, add_cancertype_covariate=False
+            )
+        except ValueError:
+            train_ids = x_train_df.index
+            train_info = sample_info_df[sample_info_df.sample_id.isin(train_ids)]
+            available_types = np.unique(train_info.cancer_type.values)
+            exit('No test samples found for cancer type: {}, gene: {}\n'
+                 'Available cancer types: {}'.format(
+                   args.holdout_cancer_type, args.gene, ' '.join(available_types)))
+
         print(x_train_df.shape)
         print(x_test_df.shape)
-        processed_df = pd.concat((x_train_df, x_test_df))
-        all_ids = processed_df.index
-        processed_info = sample_info_df[sample_info_df.sample_id.isin(all_ids)]
-        processed_cancer_types = np.unique(processed_info.cancer_type.values)
-        print(processed_cancer_types)
-        type_counts = processed_info.groupby('cancer_type').agg('count')
-        print(type_counts)
-        exit()
+        # processed_df = pd.concat((x_train_df, x_test_df), sort=False)
+        # all_ids = processed_df.index
+        # processed_info = sample_info_df[sample_info_df.sample_id.isin(all_ids)]
+        # processed_cancer_types = np.unique(processed_info.cancer_type.values)
+        # print(processed_cancer_types)
+        # type_counts = processed_info.groupby('cancer_type').agg('count')
+        # print(type_counts)
+        # exit()
 
         # Train the model
         logging.debug(
@@ -228,16 +286,16 @@ for gene_idx, gene_series in genes_df.iterrows():
 
         # Store all results
         train_metrics_, train_roc_df, train_pr_df = summarize_results(
-            y_train_results, gene_name, signal, cfg.num_features_raw,
-            args.seed, algorithm, "train"
+            y_train_results, gene_name, args.holdout_cancer_type, signal,
+            cfg.num_features_raw, args.seed, algorithm, "train"
         )
         test_metrics_, test_roc_df, test_pr_df = summarize_results(
-            y_test_results, gene_name, signal, cfg.num_features_raw,
-            args.seed, algorithm, "test"
+            y_test_results, gene_name, args.holdout_cancer_type, signal,
+            cfg.num_features_raw, args.seed, algorithm, "test"
         )
         cv_metrics_, cv_roc_df, cv_pr_df = summarize_results(
-            y_cv_results, gene_name, signal, cfg.num_features_raw,
-            args.seed, algorithm, "cv"
+            y_cv_results, gene_name, args.holdout_cancer_type, signal,
+            cfg.num_features_raw, args.seed, algorithm, "cv"
         )
 
         # Compile summary metrics
