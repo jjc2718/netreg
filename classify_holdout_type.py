@@ -141,7 +141,8 @@ for gene_idx, gene_series in genes_df.iterrows():
 
     # Check if gene has been processed already
     check_file = os.path.join(gene_dir,
-                              "{}_raw_coefficients.tsv.gz".format(gene_name))
+                              "{}_{}_raw_coefficients.tsv.gz".format(
+                                  gene_name, args.holdout_cancer_type))
     if check_status(check_file):
         continue
 
@@ -200,14 +201,6 @@ for gene_idx, gene_series in genes_df.iterrows():
             x_train_raw_df = rnaseq_train_df
             x_test_raw_df = rnaseq_test_df
 
-        print(x_train_raw_df.shape)
-        print(x_test_raw_df.shape)
-        # raw_df = pd.concat((x_train_raw_df, x_test_raw_df))
-        # all_ids = raw_df.index
-        # sample_info_df = pd.read_csv(cfg.sample_info, sep='\t')
-        # all_cancer_types = np.unique(sample_info_df[sample_info_df.sample_id.isin(all_ids)].cancer_type.values)
-        # print(all_cancer_types)
-
         # Now, perform all the analyses for each X matrix
         # there's no reason to add cancer type as a covariate since test set
         # cancer types aren't present in training set
@@ -226,17 +219,6 @@ for gene_idx, gene_series in genes_df.iterrows():
             exit('No test samples found for cancer type: {}, gene: {}\n'
                  'Available cancer types: {}'.format(
                    args.holdout_cancer_type, args.gene, ' '.join(available_types)))
-
-        print(x_train_df.shape)
-        print(x_test_df.shape)
-        # processed_df = pd.concat((x_train_df, x_test_df), sort=False)
-        # all_ids = processed_df.index
-        # processed_info = sample_info_df[sample_info_df.sample_id.isin(all_ids)]
-        # processed_cancer_types = np.unique(processed_info.cancer_type.values)
-        # print(processed_cancer_types)
-        # type_counts = processed_info.groupby('cancer_type').agg('count')
-        # print(type_counts)
-        # exit()
 
         # Train the model
         logging.debug(
@@ -317,14 +299,14 @@ for gene_idx, gene_series in genes_df.iterrows():
     gene_metrics_df = pd.concat(gene_metrics_list)
 
     file = os.path.join(
-        gene_dir, "{}_raw_auc_threshold_metrics.tsv.gz".format(gene_name)
+        gene_dir, "{}_{}_raw_auc_threshold_metrics.tsv.gz".format(gene_name, args.holdout_cancer_type)
     )
     gene_auc_df.to_csv(
         file, sep="\t", index=False, compression="gzip", float_format="%.5g"
     )
 
     file = os.path.join(
-        gene_dir, "{}_raw_aupr_threshold_metrics.tsv.gz".format(gene_name)
+        gene_dir, "{}_{}_raw_aupr_threshold_metrics.tsv.gz".format(gene_name, args.holdout_cancer_type)
     )
     gene_aupr_df.to_csv(
         file, sep="\t", index=False, compression="gzip", float_format="%.5g"
@@ -334,7 +316,7 @@ for gene_idx, gene_series in genes_df.iterrows():
         check_file, sep="\t", index=False, compression="gzip", float_format="%.5g"
     )
 
-    file = os.path.join(gene_dir, "{}_raw_classify_metrics.tsv.gz".format(gene_name))
+    file = os.path.join(gene_dir, "{}_{}_raw_classify_metrics.tsv.gz".format(gene_name, args.holdout_cancer_type))
     gene_metrics_df.to_csv(
         file, sep="\t", index=False, compression="gzip", float_format="%.5g"
     )
