@@ -18,6 +18,8 @@ rnaseq_train = data_dir.joinpath(
                     'train_tcga_expression_matrix_processed.tsv.gz').resolve()
 rnaseq_test = data_dir.joinpath(
                     'test_tcga_expression_matrix_processed.tsv.gz').resolve()
+sample_counts = data_dir.joinpath('tcga_sample_counts.tsv').resolve()
+sample_info = data_dir.joinpath('tcga_sample_identifiers.tsv').resolve()
 
 # parameters for classification using raw gene expression
 num_features_raw = 8000
