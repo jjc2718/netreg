@@ -168,7 +168,7 @@ test_data.close()
 train_labels.close()
 test_labels.close()
 
-# Fit R model on training set an# test on held out data
+# Fit R model on training set and test on held out data
 r_args = [
     'Rscript',
     os.path.join(cfg.scripts_dir, 'run_gelnet.R'),

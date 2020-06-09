@@ -22,6 +22,7 @@ from tcga_util import (
     check_status
 )
 import utilities.data_utilities as du
+import utilities.gelnet_utilities as gu
 
 def summarize_results(results, gene, holdout_cancer_type, signal, z_dim,
                       seed, algorithm, data_type):
@@ -75,6 +76,9 @@ def summarize_results(results, gene, holdout_cancer_type, signal, z_dim,
     return metrics_out_, roc_df_, pr_df_
 
 p = argparse.ArgumentParser()
+p.add_argument('--use_gelnet', action='store_true',
+               help='If included, use GELnet R package for logistic regression.\
+                     Otherwise, use scikit-learn implementation in tcga_utils.')
 p.add_argument('--gene', type=str, default=None,
                help='Provide a gene to run mutation classification for.')
 p.add_argument('--holdout_cancer_type', type=str, default=None,
@@ -233,15 +237,32 @@ for gene_idx, gene_series in genes_df.iterrows():
         )
 
         # Fit the model
-        cv_pipeline, y_pred_train_df, y_pred_test_df, y_cv_df = train_model(
-            x_train=x_train_df,
-            x_test=x_test_df,
-            y_train=y_train_df,
-            alphas=cfg.alphas,
-            l1_ratios=cfg.l1_ratios,
-            n_folds=cfg.folds,
-            max_iter=cfg.max_iter,
-        )
+        if args.use_gelnet:
+            gelnet_results = gu.fit_gelnet_model(x_train_df, x_test_df, y_train_df,
+                                                 args.results_dir, args.seed,
+                                                 args.verbose)
+            y_pred_train_df, y_pred_test_df, coef_df = gelnet_results
+        else:
+            cv_pipeline, y_pred_train_df, y_pred_test_df, y_cv_df = train_model(
+                x_train=x_train_df,
+                x_test=x_test_df,
+                y_train=y_train_df,
+                alphas=cfg.alphas,
+                l1_ratios=cfg.l1_ratios,
+                n_folds=cfg.folds,
+                max_iter=cfg.max_iter,
+            )
+            # Get coefficients
+            coef_df = extract_coefficients(
+                cv_pipeline=cv_pipeline,
+                feature_names=x_train_df.columns,
+                signal=signal,
+                z_dim=cfg.num_features_raw,
+                seed=args.seed,
+                algorithm=algorithm,
+            )
+
+            coef_df = coef_df.assign(gene=gene_name)
 
         # Get metric predictions
         y_train_results = get_threshold_metrics(
@@ -253,18 +274,6 @@ for gene_idx, gene_series in genes_df.iterrows():
         y_cv_results = get_threshold_metrics(
             y_train_df.status, y_cv_df, drop=False
         )
-
-        # Get coefficients
-        coef_df = extract_coefficients(
-            cv_pipeline=cv_pipeline,
-            feature_names=x_train_df.columns,
-            signal=signal,
-            z_dim=cfg.num_features_raw,
-            seed=args.seed,
-            algorithm=algorithm,
-        )
-
-        coef_df = coef_df.assign(gene=gene_name)
 
         # Store all results
         train_metrics_, train_roc_df, train_pr_df = summarize_results(
