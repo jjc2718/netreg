@@ -9,9 +9,12 @@ run_gelnet <- function(args) {
     # extensive use, should implement to resolve network edges)
     X_train <- as.matrix(read.csv(args$train_data, sep='\t', header=F))
     X_test <- as.matrix(read.csv(args$test_data, sep='\t', header=F))
-    # gelnet expects these to be vectors rather than matrices
+    # gelnet expects this to be a vector rather than a matrix
     y_train <- read.csv(args$train_labels, header=F)$V1
-    y_test <- read.csv(args$test_labels, header=F)$V1
+    # for logistic regression, convert 0/1 vector into binary factor
+    if (args$classify) {
+        y_train <- factor(y_train > 0, levels=c(T, F))
+    }
 
     if (args$ignore_network) {
         # if ignore flag is provided, just use identity matrix
@@ -29,7 +32,7 @@ run_gelnet <- function(args) {
     # train on training data
     # cv option overrides hardcoded penalty options
     if (args$cv) {
-        cv_choices <- 20
+        cv_choices <- 5
         if (!args$verbose) {
             # silent option doesn't work for CV so send output to /dev/null
             sink('/dev/null')
@@ -40,7 +43,8 @@ run_gelnet <- function(args) {
                          nL2=cv_choices,
                          P=G.X,
                          max.iter=args$num_epochs,
-                         eps=1e-08)
+                         eps=1e-04,
+                         balanced=T)
         if (!args$verbose) {
             sink()
         }
@@ -109,19 +113,19 @@ main <- function() {
     parser$add_argument('--train_data', required=T)
     parser$add_argument('--train_labels', required=T)
     parser$add_argument('--test_data', required=T)
-    parser$add_argument('--test_labels', required=T)
 
     # input parameters, only used to construct output filename
-    parser$add_argument('--network_file', required=T)
-    parser$add_argument('--num_samples', required=T)
-    parser$add_argument('--num_features', required=T)
-    parser$add_argument('--noise_stdev', required=T)
-    parser$add_argument('--uncorr_frac', required=T)
+    parser$add_argument('--network_file', default='none')
+    parser$add_argument('--num_samples', default='0')
+    parser$add_argument('--num_features', default='0')
+    parser$add_argument('--noise_stdev', default='0')
+    parser$add_argument('--uncorr_frac', default='0')
     parser$add_argument('--results_dir', required=T)
     parser$add_argument('--seed', type='integer', required=T)
     parser$add_argument('--verbose', action='store_true')
 
     # parameters for network-regularized regression model
+    parser$add_argument('--classify', action='store_true')
     parser$add_argument('--l1_penalty', type='double', default=1)
     parser$add_argument('--network_penalty', type='double', default=1)
     parser$add_argument('--cv', action='store_true')
